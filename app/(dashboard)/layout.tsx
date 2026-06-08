@@ -4,114 +4,206 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/authContext";
+import {
+  LayoutDashboard,
+  Building2,
+  Plane,
+  PlaneTakeoff,
+  Users,
+  UsersRound,
+  Bot,
+  Settings,
+  Ticket,
+  Search,
+  Bell,
+  MessageSquare,
+  UserCircle,
+  LogOut,
+  Menu,
+  X,
+  Sparkles,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const ADMIN_LINKS = [
-  { icon: "⊞", label: "Dashboard", href: "/admin" },
-  { icon: "🏢", label: "Airports", href: "/admin/airports" },
-  { icon: "✈", label: "Airlines", href: "/admin/airlines" },
-  { icon: "🛫", label: "Flights", href: "/admin/flights" },
-  { icon: "👤", label: "Passengers", href: "/admin/passengers" },
-  { icon: "👥", label: "Users", href: "/admin/users" },
-  { icon: "🤖", label: "AI Summary", href: "/admin/ai" },
-  { icon: "⚙", label: "Settings", href: "/admin/settings" },
+interface NavLink {
+  icon: LucideIcon;
+  label: string;
+  href: string;
+  badge?: number;
+}
+
+const ADMIN_LINKS: NavLink[] = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
+  { icon: Building2, label: "Airports", href: "/admin/airports" },
+  { icon: Plane, label: "Airlines", href: "/admin/airlines" },
+  { icon: PlaneTakeoff, label: "Flights", href: "/admin/flights" },
+  { icon: Users, label: "Passengers", href: "/admin/passengers" },
+  { icon: UsersRound, label: "Users", href: "/admin/users" },
+  { icon: Bot, label: "AI Summary", href: "/admin/ai" },
+  { icon: Settings, label: "Settings", href: "/admin/settings" },
 ];
 
-const USER_LINKS = [
-  { icon: "🎫", label: "My Flights", href: "/user" },
-  { icon: "🔍", label: "Search Flights", href: "/search" },
-  { icon: "🔔", label: "Notifications", href: "/user/notifications" },
-  { icon: "💬", label: "AI Assistant", href: "/user/ai" },
-  { icon: "👤", label: "Profile", href: "/user/profile" },
+const USER_LINKS: NavLink[] = [
+  { icon: Ticket, label: "My Flights", href: "/user" },
+  { icon: Search, label: "Search Flights", href: "/search" },
+  { icon: Bell, label: "Notifications", href: "/user/notifications", badge: 5 },
+  { icon: MessageSquare, label: "AI Assistant", href: "/user/ai" },
+  { icon: UserCircle, label: "Profile", href: "/user/profile" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Xử lý chuyển hướng nếu chưa đăng nhập (Dùng useEffect cho an toàn với React 19)
+  // 1. Kiểm tra trạng thái đăng nhập và phân quyền Route điều hướng
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login");
-    }
-  }, [isLoading, user, router]);
+    if (!isLoading) {
+      // Nếu chưa đăng nhập -> Bắt buộc đá về trang login
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
-  // Đang tải thông tin user hoặc chưa đăng nhập thì hiện màn hình chờ
-  if (isLoading || !user) {
+      // Nếu đã đăng nhập nhưng User thường cố tình vào đường dẫn /admin
+      if (pathname.startsWith("/admin") && user.role !== "ADMIN") {
+        router.push("/user"); // Đá ngược về trang của user
+      }
+    }
+  }, [isLoading, user, pathname, router]);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  // Trong lúc đang load hoặc chưa có user (hoặc user thường cố vào admin), giữ trạng thái Loading chặn render giao diện trái phép
+  if (isLoading || !user || (pathname.startsWith("/admin") && user.role !== "ADMIN")) {
     return (
-      <div style={{ display: "flex", height: "100vh", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-        <div style={{ textAlign: "center", color: "#6b7280" }}>
-          <p style={{ fontSize: 18, fontWeight: 600 }}>Loading...</p>
-        </div>
+      <div className="dash-loading">
+        <div className="dash-loading-spinner" />
+        <p>Loading dashboard...</p>
       </div>
     );
   }
 
-  // Lấy role từ user thật
-  const userRole = user.role === "ADMIN" ? "ADMIN" : "USER";
-  const links = userRole === "ADMIN" ? ADMIN_LINKS : USER_LINKS;
+  // 2. Logic hiển thị Sidebar: Dựa vào URL hiện tại thay vì chỉ dựa vào Role của Account
+  const isAdminRoute = pathname.startsWith("/admin");
+  const links = isAdminRoute && user.role === "ADMIN" ? ADMIN_LINKS : USER_LINKS;
+  const currentDisplayRole = isAdminRoute && user.role === "ADMIN" ? "ADMIN" : "USER";
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#f1f5f9", fontFamily: "'DM Sans', sans-serif" }}>
-      
+    <div className="dash-root">
+      {/* ── MOBILE OVERLAY ── */}
+      <div
+        className={`dash-overlay ${sidebarOpen ? "dash-overlay--visible" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
       {/* ── SIDEBAR ── */}
-      <aside style={{
-        width: 240, background: "#0d1f40", color: "#fff",
-        display: "flex", flexDirection: "column", padding: "24px 0", flexShrink: 0
-      }}>
-        <div style={{ padding: "0 20px", marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 20 }}>✈️</span>
-          <span style={{ fontWeight: 800, fontSize: 16 }}>SkyTrack AI</span>
+      <aside className={`dash-sidebar ${sidebarOpen ? "dash-sidebar--open" : ""}`}>
+        {/* Logo */}
+        <div className="dash-sidebar-logo">
+          <div className="dash-sidebar-logo-icon">
+            <Plane className="w-5 h-5" />
+          </div>
+          <div className="dash-sidebar-logo-text">
+            <span className="dash-sidebar-logo-title">
+              SkyTrack <span className="dash-sidebar-logo-ai">AI</span>
+            </span>
+            <span className="dash-sidebar-logo-sub">Real-time Flight Tracking</span>
+          </div>
         </div>
 
-        <div style={{ padding: "0 20px", marginBottom: 16 }}>
-          <span style={{
-            background: userRole === "ADMIN" ? "rgba(59,130,246,.2)" : "rgba(16,185,129,.2)",
-            color: userRole === "ADMIN" ? "#60a5fa" : "#6ee7b7",
-            padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600
-          }}>
-            {userRole} PANEL
+        {/* Role Badge */}
+        <div className="dash-sidebar-role">
+          <span className={`dash-sidebar-role-badge ${currentDisplayRole === "ADMIN" ? "dash-sidebar-role-badge--admin" : "dash-sidebar-role-badge--user"}`}>
+            {currentDisplayRole === "ADMIN" ? "ADMIN PANEL" : "USER PANEL"}
           </span>
         </div>
 
-        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-          {links.map(link => (
-            <Link key={link.href} href={link.href} style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "10px 20px", color: pathname === link.href ? "#fff" : "#94a3b8",
-              background: pathname === link.href ? "rgba(59,130,246,.2)" : "transparent",
-              borderRight: pathname === link.href ? "3px solid #3b82f6" : "3px solid transparent",
-              textDecoration: "none", fontSize: 13.5, fontWeight: 500, transition: "all .15s"
-            }}>
-              <span>{link.icon}</span><span>{link.label}</span>
-            </Link>
-          ))}
+        {/* Navigation */}
+        <nav className="dash-sidebar-nav">
+          {links.map((link) => {
+            const Icon = link.icon;
+            const isActive =
+              pathname === link.href ||
+              (link.href !== "/user" && link.href !== "/admin" && pathname.startsWith(link.href));
+
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`dash-sidebar-link ${isActive ? "dash-sidebar-link--active" : ""}`}
+              >
+                <Icon className="dash-sidebar-link-icon" />
+                <span className="dash-sidebar-link-label">{link.label}</span>
+                {link.badge && link.badge > 0 && (
+                  <span className="dash-sidebar-link-badge">{link.badge}</span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(255,255,255,.07)" }}>
-          <button onClick={logout} style={{
-            background: "rgba(239,68,68,.15)", color: "#f87171", border: "none",
-            padding: "10px", borderRadius: 8, width: "100%", cursor: "pointer",
-            fontWeight: 600, fontSize: 13, fontFamily: "inherit"
-          }}>👋 Logout</button>
+        {/* AI Promo */}
+        <div className="dash-sidebar-ai-card">
+          <div className="dash-sidebar-ai-card-icon">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div className="dash-sidebar-ai-card-content">
+            <p className="dash-sidebar-ai-card-title">Ask SkyTrack AI</p>
+            <p className="dash-sidebar-ai-card-desc">Get flight insights instantly</p>
+          </div>
+          <Link href={currentDisplayRole === "ADMIN" ? "/admin/ai" : "/user/ai"} className="dash-sidebar-ai-card-btn">
+            Try Now
+          </Link>
+        </div>
+
+        {/* User + Logout */}
+        <div className="dash-sidebar-footer">
+          <div className="dash-sidebar-user">
+            <div className="dash-sidebar-user-avatar">
+              {user.name?.charAt(0).toUpperCase() || "U"}
+            </div>
+            <div className="dash-sidebar-user-info">
+              <span className="dash-sidebar-user-name">{user.name || user.email}</span>
+              <span className="dash-sidebar-user-role">
+                {user.role === "ADMIN" ? "Administrator" : "Premium User"}
+              </span>
+            </div>
+          </div>
+          <button onClick={logout} className="dash-sidebar-logout">
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
         </div>
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-        {/* <header style={{
-          height: 56, background: "#fff", borderBottom: "1px solid #e5e7eb",
-          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", flexShrink: 0
-        }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700 }}>{userRole} Dashboard</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: "#64748b" }}>Welcome, <strong>{user.name || user.email}</strong></span>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#3b82f6", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>
-              {userRole === "ADMIN" ? "A" : "U"}
-            </div>
+      <div className="dash-main">
+        {/* Mobile Top Bar */}
+        <div className="dash-mobile-topbar">
+          <button
+            className="dash-mobile-menu-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="dash-mobile-logo">
+            <Plane className="w-4 h-4 text-blue-500" />
+            <span className="dash-mobile-logo-text">
+              SkyTrack <span style={{ color: "#60a5fa" }}>AI</span>
+            </span>
           </div>
-        </header> */}
-        <main style={{ flex: 1, padding: "24px" }}>
+          <div className="dash-sidebar-user-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
+            {user.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+        </div>
+
+        <main className="dash-content">
           {children}
         </main>
       </div>

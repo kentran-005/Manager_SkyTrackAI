@@ -13,7 +13,7 @@ export default function LiveMapPage() {
   return (
     <>
       {/* Main Canvas */}
-      <main className="relative flex-1 h-min-screen w-full overflow-hidden">
+      <main className="relative flex-1 min-h-screen w-full overflow-hidden">
         {/* Layer 1: Map */}
         <MapView />
 
