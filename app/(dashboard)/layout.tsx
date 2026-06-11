@@ -46,7 +46,8 @@ const ADMIN_LINKS: NavLink[] = [
 
 const USER_LINKS: NavLink[] = [
   { icon: Ticket, label: "My Flights", href: "/user" },
-  { icon: Search, label: "Search Flights", href: "/search" },
+  { icon: Search, label: "Search Flights", href: "/user/search" },
+  { icon: MapIcon, label: "Live Map", href: "/user/live-map" },
   { icon: Bell, label: "Notifications", href: "/user/notifications", badge: 5 },
   { icon: MessageSquare, label: "AI Assistant", href: "/user/ai" },
   { icon: UserCircle, label: "Profile", href: "/user/profile" },
