@@ -96,6 +96,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext"; 
+import api from "@/lib/axios";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -132,17 +133,7 @@ export default function LoginPage() {
 
     // ── LUỒNG CHẠY THẬT VỚI SPRING BOOT (CỦA BẠN) ──
     try {
-      const res = await fetch("http://localhost:8080/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Login failed");
-      }
+      const { data } = await api.post("/api/auth/login", { email, password });
 
       login(data.token, { email: data.email, role: data.role, name: data.name });
 
@@ -151,8 +142,8 @@ export default function LoginPage() {
       } else {
         router.push("/user");
       }
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }

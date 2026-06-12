@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Search, Filter, Plane, ArrowRight, Clock, MoreHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Search, Filter, Plane, ArrowRight, Clock } from 'lucide-react'
+import api from '@/lib/axios'
 
-type FlightStatus = 'On Time' | 'Delayed' | 'Cancelled'
+type FlightStatus = 'On Time' | 'Delayed' | 'Cancelled' | 'Scheduled' | 'Boarding'
 
 interface Flight {
   code: string
@@ -20,24 +21,24 @@ interface Flight {
   gate: string
 }
 
-const allFlights: Flight[] = [
-  { code: 'VN220', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'SGN', fromCity: 'Ho Chi Minh City', to: 'HAN', toCity: 'Hanoi', departure: '06:30', arrival: '08:45', status: 'On Time', aircraft: 'A321', gate: 'A12' },
-  { code: 'VJ351', airline: 'Vietjet Air', airlineColor: '#e63946', from: 'HAN', fromCity: 'Hanoi', to: 'DAD', toCity: 'Da Nang', departure: '07:15', arrival: '08:30', status: 'Delayed', aircraft: 'A320', gate: 'B05' },
-  { code: 'VN148', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'DAD', fromCity: 'Da Nang', to: 'SGN', toCity: 'Ho Chi Minh City', departure: '08:00', arrival: '09:50', status: 'On Time', aircraft: 'B787', gate: 'C03' },
-  { code: 'QH203', airline: 'Bamboo Airways', airlineColor: '#2d9f4c', from: 'SGN', fromCity: 'Ho Chi Minh City', to: 'CXR', toCity: 'Nha Trang', departure: '09:20', arrival: '10:30', status: 'On Time', aircraft: 'A319', gate: 'D08' },
-  { code: 'VN512', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'HAN', fromCity: 'Hanoi', to: 'PQC', toCity: 'Phu Quoc', departure: '10:00', arrival: '12:15', status: 'Cancelled', aircraft: 'A350', gate: 'A01' },
-  { code: 'VJ102', airline: 'Vietjet Air', airlineColor: '#e63946', from: 'SGN', fromCity: 'Ho Chi Minh City', to: 'HPQ', toCity: 'Hai Phong', departure: '11:30', arrival: '12:45', status: 'Delayed', aircraft: 'A321', gate: 'B11' },
-  { code: 'VN780', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'HAN', fromCity: 'Hanoi', to: 'SGN', toCity: 'Ho Chi Minh City', departure: '12:00', arrival: '14:15', status: 'On Time', aircraft: 'B787', gate: 'A09' },
-  { code: 'VJ456', airline: 'Vietjet Air', airlineColor: '#e63946', from: 'SGN', fromCity: 'Ho Chi Minh City', to: 'DAD', toCity: 'Da Nang', departure: '13:30', arrival: '14:45', status: 'On Time', aircraft: 'A320', gate: 'C07' },
-  { code: 'QH301', airline: 'Bamboo Airways', airlineColor: '#2d9f4c', from: 'DAD', fromCity: 'Da Nang', to: 'HAN', toCity: 'Hanoi', departure: '14:00', arrival: '15:15', status: 'Delayed', aircraft: 'A319', gate: 'B03' },
-  { code: 'VN312', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'CXR', fromCity: 'Nha Trang', to: 'SGN', toCity: 'Ho Chi Minh City', departure: '15:30', arrival: '16:40', status: 'On Time', aircraft: 'A321', gate: 'D12' },
-  { code: 'VJ789', airline: 'Vietjet Air', airlineColor: '#e63946', from: 'HPQ', fromCity: 'Hai Phong', to: 'SGN', toCity: 'Ho Chi Minh City', departure: '16:00', arrival: '18:10', status: 'On Time', aircraft: 'A320', gate: 'A06' },
-  { code: 'VN901', airline: 'Vietnam Airlines', airlineColor: '#0066ff', from: 'PQC', fromCity: 'Phu Quoc', to: 'HAN', toCity: 'Hanoi', departure: '17:00', arrival: '19:20', status: 'On Time', aircraft: 'A350', gate: 'C10' },
-]
+interface BackendFlight {
+  flightCode?: string
+  airline?: { code?: string; name?: string }
+  departureAirport?: { code?: string; city?: string; name?: string }
+  arrivalAirport?: { code?: string; city?: string; name?: string }
+  departureTime?: string
+  arrivalTime?: string
+  status?: string
+  aircraft?: string
+  type?: string
+  gate?: string
+}
 
 const statusFilters: { label: string; value: FlightStatus | 'All' }[] = [
   { label: 'All', value: 'All' },
   { label: 'On Time', value: 'On Time' },
+  { label: 'Scheduled', value: 'Scheduled' },
+  { label: 'Boarding', value: 'Boarding' },
   { label: 'Delayed', value: 'Delayed' },
   { label: 'Cancelled', value: 'Cancelled' },
 ]
@@ -45,7 +46,10 @@ const statusFilters: { label: string; value: FlightStatus | 'All' }[] = [
 function getStatusBadge(status: FlightStatus) {
   switch (status) {
     case 'On Time':
+    case 'Boarding':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    case 'Scheduled':
+      return 'bg-blue-50 text-blue-700 border-blue-200'
     case 'Delayed':
       return 'bg-amber-50 text-amber-700 border-amber-200'
     case 'Cancelled':
@@ -56,7 +60,10 @@ function getStatusBadge(status: FlightStatus) {
 function getStatusDot(status: FlightStatus) {
   switch (status) {
     case 'On Time':
+    case 'Boarding':
       return 'bg-emerald-500'
+    case 'Scheduled':
+      return 'bg-blue-500'
     case 'Delayed':
       return 'bg-amber-500'
     case 'Cancelled':
@@ -64,11 +71,80 @@ function getStatusDot(status: FlightStatus) {
   }
 }
 
+function formatTime(value?: string) {
+  if (!value) return '--:--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.slice(0, 5)
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+}
+
+function mapStatus(status?: string): FlightStatus {
+  switch (status) {
+    case 'ON_TIME':
+      return 'On Time'
+    case 'DELAYED':
+      return 'Delayed'
+    case 'CANCELLED':
+      return 'Cancelled'
+    case 'BOARDING':
+      return 'Boarding'
+    default:
+      return 'Scheduled'
+  }
+}
+
+function getAirlineColor(code?: string) {
+  if (code === 'VJ') return '#e63946'
+  if (code === 'QH') return '#2d9f4c'
+  return '#0066ff'
+}
+
+function mapBackendFlight(f: BackendFlight): Flight {
+  return {
+    code: f.flightCode || 'N/A',
+    airline: f.airline?.name || 'Unknown Airline',
+    airlineColor: getAirlineColor(f.airline?.code),
+    from: f.departureAirport?.code || 'N/A',
+    fromCity: f.departureAirport?.city || f.departureAirport?.name || 'N/A',
+    to: f.arrivalAirport?.code || 'N/A',
+    toCity: f.arrivalAirport?.city || f.arrivalAirport?.name || 'N/A',
+    departure: formatTime(f.departureTime),
+    arrival: formatTime(f.arrivalTime),
+    status: mapStatus(f.status),
+    aircraft: f.aircraft || f.type || 'N/A',
+    gate: f.gate || 'N/A',
+  }
+}
+
 export default function FlightsPage() {
   const [activeFilter, setActiveFilter] = useState<FlightStatus | 'All'>('All')
   const [searchQuery, setSearchQuery] = useState('')
+  const [flights, setFlights] = useState<Flight[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filteredFlights = allFlights.filter((flight) => {
+  useEffect(() => {
+    let mounted = true
+
+    async function loadFlights() {
+      try {
+        setLoading(true)
+        const res = await api.get('/api/flights')
+        if (mounted) setFlights(Array.isArray(res.data) ? res.data.map(mapBackendFlight) : [])
+      } catch (err: unknown) {
+        if (mounted) setError(err instanceof Error ? err.message : 'Cannot load flights')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadFlights()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const filteredFlights = flights.filter((flight) => {
     const matchesFilter = activeFilter === 'All' || flight.status === activeFilter
     const matchesSearch = searchQuery === '' ||
       flight.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -122,9 +198,15 @@ export default function FlightsPage() {
         {/* Flight Count */}
         <div className="flex items-center justify-between">
           <p className="text-sm text-[#64748b]">
-            Showing <span className="font-semibold text-[#0f172a]">{filteredFlights.length}</span> of {allFlights.length} flights
+            Showing <span className="font-semibold text-[#0f172a]">{filteredFlights.length}</span> of {flights.length} flights
           </p>
         </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         {/* Flights Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -191,7 +273,14 @@ export default function FlightsPage() {
           ))}
         </div>
 
-        {filteredFlights.length === 0 && (
+        {loading && (
+          <div className="text-center py-16">
+            <Plane className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3 animate-pulse" />
+            <p className="text-[#64748b] font-medium">Loading flights...</p>
+          </div>
+        )}
+
+        {!loading && filteredFlights.length === 0 && (
           <div className="text-center py-16">
             <Plane className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3" />
             <p className="text-[#64748b] font-medium">No flights found</p>

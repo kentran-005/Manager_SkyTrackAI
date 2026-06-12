@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Fragment, type ComponentType, type PropsWithChildren, useEffect, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -12,8 +12,9 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { BarChart3, Building2, CloudSun, Filter, Flame, Route, Search } from 'lucide-react';
 
-interface Flight {
+export interface Flight {
   id: string | number;
   flightNumber: string;
   airline?: { name: string; code: string };
@@ -25,6 +26,19 @@ interface Flight {
   altitude: number;
   speed: number;
   status: string;
+}
+
+type LeafletComponentProps = PropsWithChildren<Record<string, unknown>>;
+
+const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>;
+const LeafletTileLayer = TileLayer as unknown as ComponentType<Record<string, unknown>>;
+const LeafletMarker = Marker as unknown as ComponentType<LeafletComponentProps>;
+const LeafletPolyline = Polyline as unknown as ComponentType<Record<string, unknown>>;
+const LeafletTooltip = Tooltip as unknown as ComponentType<LeafletComponentProps>;
+const LeafletZoomControl = ZoomControl as unknown as ComponentType<Record<string, unknown>>;
+
+interface InteractiveMap {
+  flyTo(center: [number, number], zoom?: number, options?: { duration?: number }): void;
 }
 
 function createPlaneIcon(heading: number, selected: boolean) {
@@ -47,11 +61,11 @@ function createPlaneIcon(heading: number, selected: boolean) {
 }
 
 function FlyToSelected({ flight }: { flight: Flight | null }) {
-  const map = useMap();
+  const map = useMap() as unknown as InteractiveMap;
 
-  useMemo(() => {
+  useEffect(() => {
     if (!flight) return;
-    map.flyTo([flight.latitude, flight.longitude], 6, { duration: 1.2 });
+    map.flyTo([flight.latitude, flight.longitude], 7, { duration: 1.2 });
   }, [flight, map]);
 
   return null;
@@ -70,68 +84,91 @@ const airportCoords: Record<string, [number, number]> = {
 export default function FlightMap({
   flights,
   selectedFlight,
-  onSelect
+  onSelect,
+  searchTerm,
+  onSearchTermChange,
+  onSearchSubmit,
 }: {
   flights: Flight[];
   selectedFlight: Flight | null;
   onSelect: (flight: Flight) => void;
+  searchTerm?: string;
+  onSearchTermChange?: (value: string) => void;
+  onSearchSubmit?: () => void;
 }) {
+  const [activeLayers, setActiveLayers] = useState({
+    heatmap: false,
+    weather: false,
+    airports: true,
+    routes: true,
+    traffic: true,
+  });
+
+  function toggleLayer(layer: keyof typeof activeLayers) {
+    setActiveLayers((current) => ({ ...current, [layer]: !current[layer] }));
+  }
+
   return (
     <div className="w-full h-full relative">
       {/* Top Search Overlay */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-3 bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl px-4 py-2.5 shadow-2xl shadow-black/40">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSearchSubmit?.();
+        }}
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-wrap justify-center gap-3 bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl px-4 py-2.5 shadow-2xl shadow-black/40"
+      >
         <div className="relative">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 w-3.5 h-3.5" />
           <input
+            value={searchTerm ?? ''}
+            onChange={(event) => onSearchTermChange?.(event.target.value)}
             placeholder="Search flight number..."
             className="w-56 bg-[#131a2a] border border-[#1f2b42] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
           />
         </div>
-        <div className="relative">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <input
-            placeholder="Search airport..."
-            className="w-56 bg-[#131a2a] border border-[#1f2b42] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
-          />
-        </div>
-        <button className="px-3 py-1.5 rounded-lg bg-[#182338] border border-[#1f2b42] text-slate-300 text-xs font-medium hover:bg-[#1f2b42] transition-colors flex items-center gap-1.5">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-          </svg>
+        <button
+          type="submit"
+          className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-white text-xs font-semibold hover:bg-blue-500 transition-colors flex items-center gap-1.5"
+        >
+          <Search className="w-3.5 h-3.5" />
+          Track
+        </button>
+        <button
+          type="button"
+          onClick={() => onSearchTermChange?.('')}
+          className="px-3 py-1.5 rounded-lg bg-[#182338] border border-[#1f2b42] text-slate-300 text-xs font-medium hover:bg-[#1f2b42] transition-colors flex items-center gap-1.5"
+        >
+          <Filter className="w-3.5 h-3.5" />
           Filters
         </button>
-      </div>
+      </form>
 
-      <MapContainer
+      <LeafletMapContainer
         center={[15.5, 108]}
         zoom={5}
         zoomControl={false}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
       >
-        <ZoomControl position="bottomright" />
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+        <LeafletZoomControl position="bottomright" />
+        <LeafletTileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
         <FlyToSelected flight={selectedFlight} />
 
-        {flights.map((flight: Flight) => {
+        {activeLayers.traffic && flights.map((flight: Flight) => {
           const selected = selectedFlight?.id === flight.id;
           const originCoord = airportCoords[flight.origin];
           const destCoord = airportCoords[flight.destination];
 
           return (
-            <div key={String(flight.id)}>
-              <Marker
+            <Fragment key={String(flight.id)}>
+              <LeafletMarker
                 position={[flight.latitude, flight.longitude]}
                 icon={createPlaneIcon(flight.heading, selected)}
                 eventHandlers={{ click: () => onSelect(flight) }}
               >
                 {selected && (
-                  <Tooltip
+                  <LeafletTooltip
                     direction="top"
                     offset={[0, -16]}
                     permanent
@@ -142,49 +179,55 @@ export default function FlightMap({
                       <div className="text-slate-400">{flight.origin} → {flight.destination}</div>
                       <div className="text-slate-500">{flight.altitude.toLocaleString()} ft • {flight.speed} km/h</div>
                     </div>
-                  </Tooltip>
+                  </LeafletTooltip>
                 )}
-              </Marker>
+              </LeafletMarker>
 
               {/* Route polylines for selected flight */}
-              {selected && originCoord && (
-                <Polyline
+              {activeLayers.routes && selected && originCoord && (
+                <LeafletPolyline
                   positions={[originCoord, [flight.latitude, flight.longitude]]}
                   pathOptions={{ color: '#3b82f6', weight: 2, dashArray: '8 8', opacity: 0.7 }}
                 />
               )}
-              {selected && destCoord && (
-                <Polyline
+              {activeLayers.routes && selected && destCoord && (
+                <LeafletPolyline
                   positions={[[flight.latitude, flight.longitude], destCoord]}
                   pathOptions={{ color: '#3b82f6', weight: 1.5, dashArray: '4 8', opacity: 0.4 }}
                 />
               )}
-            </div>
+            </Fragment>
           );
         })}
-      </MapContainer>
+      </LeafletMapContainer>
 
       {/* Bottom Toolbar */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl p-1.5 flex gap-1 shadow-2xl shadow-black/40">
         {[
-          { name: 'Heatmap', icon: '🔥' },
-          { name: 'Weather', icon: '☁️' },
-          { name: 'Airports', icon: '✈️' },
-          { name: 'Routes', icon: '⟶' },
-          { name: 'Traffic', icon: '📊' },
-        ].map((item, idx) => (
+          { name: 'Heatmap', key: 'heatmap', Icon: Flame },
+          { name: 'Weather', key: 'weather', Icon: CloudSun },
+          { name: 'Airports', key: 'airports', Icon: Building2 },
+          { name: 'Routes', key: 'routes', Icon: Route },
+          { name: 'Traffic', key: 'traffic', Icon: BarChart3 },
+        ].map((item) => {
+          const layerKey = item.key as keyof typeof activeLayers;
+          const Icon = item.Icon;
+
+          return (
           <button
             key={item.name}
+            type="button"
+            onClick={() => toggleLayer(layerKey)}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-              idx === 0
+              activeLayers[layerKey]
                 ? 'bg-[#182338] text-white border border-[#1f2b42]'
                 : 'text-slate-400 hover:bg-[#182338] hover:text-slate-200'
             }`}
           >
-            <span className="text-sm">{item.icon}</span>
+            <Icon className="w-3.5 h-3.5" />
             {item.name}
           </button>
-        ))}
+        )})}
       </div>
     </div>
   );

@@ -1,55 +1,112 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { ReactNode, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import api from "@/lib/axios"; // Import axios đã cấu hình
 
 // ── Types ──
 interface Flight {
   id: string;
   flightNo: string;
   airline: string;
-  airlineLogo: string;
-  status: "On Time" | "Delayed" | "Cancelled";
+  airlineLogo: ReactNode;
+  status: "On Time" | "Delayed" | "Cancelled" | "Scheduled" | "Boarding";
   from: { code: string; city: string; airport: string; time: string; date: string };
   to:   { code: string; city: string; airport: string; time: string; date: string };
   duration: string;
   stops: string;
   gate: string;
   terminal: string;
-  aircraft: string;
-  seats: string;
 }
 
-const MOCK_FLIGHTS: Flight[] = [
-  {
-    id: "1",
-    flightNo: "VN220",
-    airline: "Vietnam Airlines",
-    airlineLogo: "🌸",
-    status: "On Time",
-    from: { code: "SGN", city: "Ho Chi Minh City", airport: "Tan Son Nhat Intl", time: "10:30", date: "01/06/2026" },
-    to:   { code: "HAN", city: "Hanoi", airport: "Noi Bai Intl", time: "12:45", date: "01/06/2026" },
-    duration: "2h 15m", stops: "Direct",
-    gate: "A12", terminal: "T1", aircraft: "Airbus A321", seats: "42%",
-  },
-  {
-    id: "2",
-    flightNo: "VN222",
-    airline: "Vietnam Airlines",
-    airlineLogo: "🌸",
-    status: "Delayed",
-    from: { code: "SGN", city: "Ho Chi Minh City", airport: "Tan Son Nhat Intl", time: "14:00", date: "01/06/2026" },
-    to:   { code: "HAN", city: "Hanoi", airport: "Noi Bai Intl", time: "16:30", date: "01/06/2026" },
-    duration: "2h 30m", stops: "Direct",
-    gate: "B5", terminal: "T2", aircraft: "Boeing 787", seats: "18%",
-  },
-];
+interface BackendFlight {
+  id?: number | string;
+  flightCode?: string;
+  airline?: { name?: string; logo?: string };
+  departureAirport?: { code?: string; city?: string; name?: string };
+  arrivalAirport?: { code?: string; city?: string; name?: string };
+  departureTime?: string;
+  arrivalTime?: string;
+  status?: string;
+  price?: number;
+  type?: string;
+  gate?: string;
+  terminal?: string;
+}
 
 const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
   "On Time":  { color: "#16a34a", bg: "#dcfce7" },
   "Delayed":  { color: "#d97706", bg: "#fef3c7" },
   "Cancelled":{ color: "#dc2626", bg: "#fee2e2" },
+  "Scheduled":{ color: "#2563eb", bg: "#dbeafe" },
+  "Boarding": { color: "#7c3aed", bg: "#ede9fe" },
 };
+
+// Hàm chuyển đổi dữ liệu Backend sang Frontend
+function mapBackendFlight(f: BackendFlight): Flight {
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return { time: "N/A", date: "N/A" };
+    // Xử lý chuẩn_datetime của DB (2026-07-01T08:00:00) và của API (2026-07-01 08:00:00)
+    const normalizedDateStr = dateStr.replace(" ", "T"); 
+    const d = new Date(normalizedDateStr);
+    if (isNaN(d.getTime())) return { time: "N/A", date: "N/A" }; // Lỗi parse
+    
+    const time = d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
+    const date = d.getDate().toString().padStart(2, '0') + "/" + (d.getMonth() + 1).toString().padStart(2, '0') + "/" + d.getFullYear();
+    return { time, date };
+  };
+
+  const departure = formatTime(f.departureTime);
+  const arrival = formatTime(f.arrivalTime);
+
+  let duration = "N/A";
+  if (f.departureTime && f.arrivalTime) {
+    const normalizedDep = f.departureTime.replace(" ", "T");
+    const normalizedArr = f.arrivalTime.replace(" ", "T");
+    const diffMs = new Date(normalizedArr).getTime() - new Date(normalizedDep).getTime();
+    if (diffMs > 0) {
+      const diffMins = Math.round(diffMs / 60000);
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+      duration = `${hours}h ${mins}m`;
+    }
+  }
+
+  const statusMap: Record<string, Flight["status"]> = {
+    "ON_TIME": "On Time",
+    "DELAYED": "Delayed",
+    "CANCELLED": "Cancelled",
+    "SCHEDULED": "Scheduled",
+    "BOARDING": "Boarding"
+  };
+
+  return {
+    id: f.id?.toString() || Math.random().toString(),
+    flightNo: f.flightCode || "N/A",
+    airline: f.airline?.name || "Unknown Airline",
+    airlineLogo: f.airline?.logo ? <img src={f.airline.logo} alt="logo" style={{width: 40, height: 40, objectFit: 'contain', background: '#fff', padding: 4, borderRadius: 8}}/> : "✈️",
+    status: statusMap[f.status] || "Scheduled",
+    // Kiểm tra nếu có object airport thì lấy, nếu không (từ AviationStack) thì để N/A
+    from: { 
+      code: f.departureAirport?.code || "N/A", 
+      city: f.departureAirport?.city || "N/A", 
+      airport: f.departureAirport?.name || "N/A", 
+      time: departure.time, 
+      date: departure.date 
+    },
+    to: { 
+      code: f.arrivalAirport?.code || "N/A", 
+      city: f.arrivalAirport?.city || "N/A", 
+      airport: f.arrivalAirport?.name || "N/A", 
+      time: arrival.time, 
+      date: arrival.date 
+    },
+    duration: duration,
+    stops: f.type || "Direct",
+    gate: f.gate || "N/A",
+    terminal: f.terminal || "N/A",
+  };
+}
 
 // Tách component riêng để bọc Suspense
 function FlightSearchContent() {
@@ -57,30 +114,45 @@ function FlightSearchContent() {
   const queryFromUrl = searchParams.get("q") || "";
 
   const [query, setQuery] = useState(queryFromUrl);
-  const [date, setDate] = useState("2026-06-01");
   const [results, setResults] = useState<Flight[]>([]);
   const [searched, setSearched] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Hàm search nhận tham số truyền vào để tránh lỗi dependency của useEffect
-  function performSearch(searchQuery: string) {
-    const q = searchQuery.trim().toUpperCase();
-    if (!q) return; // Nếu rỗng thì không search
+  // Hàm search gọi API Backend
+  async function performSearch(searchQuery: string) {
+    const q = searchQuery.trim();
+    if (!q) return;
     
-    const found = MOCK_FLIGHTS.filter(f =>
-      f.flightNo.includes(q) || f.airline.toUpperCase().includes(q)
-    );
-    setResults(found);
+    setLoading(true);
     setSearched(true);
-    setExpanded(found[0]?.id ?? null);
+    setError("");
+    
+    try {
+      // Gọi API search chuyên dụng của Backend, truyền từ khóa qua param q
+      const res = await api.get(`/api/flights/search?q=${encodeURIComponent(q)}`);
+      const backendFlights = Array.isArray(res.data) ? res.data : [];
+
+      // Map dữ liệu Backend sang Structure của Frontend
+      const mappedResults = backendFlights.map(mapBackendFlight);
+      
+      setResults(mappedResults);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Cannot search flights");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // Tự động search khi có từ khóa từ URL
+  // Tự động search khi có từ khóa từ URL (khi bấm search từ trang chủ)
   useEffect(() => {
     if (queryFromUrl) {
-      performSearch(queryFromUrl);
+      window.queueMicrotask(() => {
+        void performSearch(queryFromUrl);
+      });
     }
-  }, [queryFromUrl]); // Chỉ phụ thuộc vào queryFromUrl
+  }, [queryFromUrl]);
 
   return (
     <>
@@ -102,7 +174,7 @@ function FlightSearchContent() {
           font-size: 14px; color: #111827;
           font-family: inherit;
         }
-        .main-search-field input, .main-search-field input[type=date] {
+        .main-search-field input {
           border: none; outline: none; font-size: 14px;
           font-family: inherit; color: #111827; flex: 1;
           background: transparent;
@@ -163,7 +235,7 @@ function FlightSearchContent() {
         </h1>
         {searched && (
           <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
-            {results.length} result{results.length !== 1 ? "s" : ""} found for &quot;{query}&quot;
+            {loading ? "Searching..." : `${results.length} result${results.length !== 1 ? "s" : ""} found for "${query}"`}
           </p>
         )}
 
@@ -173,23 +245,32 @@ function FlightSearchContent() {
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Flight code or airline"
-              onKeyDown={e => e.key === "Enter" && performSearch(query)} // Gọi thẳng performSearch(query)
+              placeholder="Flight code, airline, or airport code..."
+              onKeyDown={e => e.key === "Enter" && performSearch(query)}
             />
             <span style={{ color: "#d1d5db", fontSize: 18, cursor: "pointer" }}>⇄</span>
           </div>
-          <div className="main-search-field" style={{ maxWidth: 200 }}>
-            <span style={{ color: "#9ca3af", fontSize: 16 }}>📅</span>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-            />
-          </div>
-          <button className="search-btn-main" onClick={() => performSearch(query)}>Search</button>
+          <button className="search-btn-main" onClick={() => performSearch(query)} disabled={loading}>
+            {loading ? "Searching..." : "Search"}
+          </button>
         </div>
 
-        {searched && results.length === 0 && (
+        {error && (
+          <div style={{
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#b91c1c",
+            borderRadius: 12,
+            padding: "12px 14px",
+            marginBottom: 16,
+            fontSize: 14,
+            fontWeight: 600,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {searched && !loading && results.length === 0 && (
           <div style={{
             background: "#fff", borderRadius: 16, padding: "48px 24px",
             textAlign: "center", color: "#6b7280",
@@ -197,12 +278,12 @@ function FlightSearchContent() {
           }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>✈️</div>
             <p style={{ fontWeight: 600, fontSize: 16, marginBottom: 6, color: "#374151" }}>No flights found</p>
-            <p style={{ fontSize: 14 }}>Try a different flight code or date.</p>
+            <p style={{ fontSize: 14 }}>Try a different flight code, airline name, or airport code (e.g., SGN, HAN).</p>
           </div>
         )}
 
         {results.map(flight => {
-          const st = STATUS_STYLE[flight.status];
+          const st = STATUS_STYLE[flight.status] || STATUS_STYLE["Scheduled"];
           return (
             <div key={flight.id} className="flight-card">
               <div className="flight-card-body">
@@ -251,9 +332,8 @@ function FlightSearchContent() {
                   {[
                     { label: "Gate", value: flight.gate },
                     { label: "Terminal", value: flight.terminal },
-                    { label: "Aircraft", value: flight.aircraft },
+                    { label: "Type", value: flight.stops },
                     { label: "Status", value: flight.status, color: st.color },
-                    { label: "Seat Availability", value: flight.seats },
                   ].map(d => (
                     <div key={d.label} className="detail-cell">
                       <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500, marginBottom: 4 }}>{d.label}</div>

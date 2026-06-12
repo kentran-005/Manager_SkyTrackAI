@@ -167,57 +167,49 @@
 }
 
 /* ══════════ PUBLIC HEADER STYLES ══════════ */
+/* ================= LAYOUT HEADER ================= */
+
 .pub-header {
   display: flex;
   align-items: center;
-  height: 64px;
-  background: #ffffff;
+  height: 68px;
+  padding: 0 32px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid #e2e8f0;
-  padding: 0 24px;
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 100;
-  gap: 12px;
-  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
 }
 
-/* ── Logo ── */
+/* Logo giữ nguyên bên trái */
 .pub-logo-box {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-decoration: none;
-  flex-shrink: 0;
+  flex-shrink: 0; /* Không cho co lại */
+  margin-right: 40px; /* Tạo khoảng cách với Nav */
 }
-.pub-logo-icon-wrapper {
-  width: 40px;
-  height: 40px;
+
+/* NAVIGATION RA GIỮA */
+.pub-nav {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+  gap: 4px;
+  flex: 1; /* Cho phép Nav ăn hết khoảng trống giữa Logo và Actions */
+  justify-content: center; /* Đẩy các link Nav ra giữa */
 }
-.pub-logo-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-.pub-logo-ai {
-  color: #2563eb;
-}
-.pub-logo-sub {
-  font-size: 11px;
-  color: #94a3b8;
-  letter-spacing: 0.02em;
-  font-weight: 500;
-}
+
+/* ACTIONS (LOGIN/REGISTER) SÁT BÊN PHẢI */
+
+
 
 /* ── Navigation ── */
 .pub-nav {
   display: flex;
+  justify-content: center;
   align-items: center;
   gap: 4px;
   margin-left: 32px;
@@ -310,13 +302,77 @@
   margin-left: 8px;
 }
 
+/* ================= DARK MODE STYLES FOR HEADER ================= */
+.dark .pub-header {
+  background: rgba(11, 16, 29, 0.95);
+  border-bottom-color: #1f2b42;
+  box-shadow: 0 1px 20px rgba(0, 0, 0, 0.5);
+}
+
+.dark .pub-logo-title {
+  color: #ffffff;
+}
+
+.dark .pub-logo-sub {
+  color: #64748b;
+}
+
+.dark .pub-nav-link {
+  color: #94a3b8;
+}
+.dark .pub-nav-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.dark .pub-nav-link.active {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.dark .mode-toggle {
+  color: #94a3b8;
+  background: #131a2a;
+  border-color: #1f2b42;
+}
+.dark .mode-toggle:hover {
+  background: #182338;
+  color: #ffffff;
+}
+
+.dark .btn-login {
+  color: #cbd5e1;
+  background: transparent;
+  border-color: #334155;
+}
+.dark .btn-login:hover {
+  background: #182338;
+  color: #ffffff;
+}
+
+.dark .btn-register {
+  background: #3b82f6;
+  border-color: #2563eb;
+}
+.dark .btn-register:hover {
+  background: #2563eb;
+}
+
+/* Đổi màu nền body khi chuyển mode */
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.dark body {
+  background-color: #020617; /* Slate-950 */
+  color: #f8fafc;
+}
+
 /* ── Actions ── */
 .pub-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: 12px;
+  gap: 12px;
   flex-shrink: 0;
+  margin-left: auto; 
 }
 .mode-toggle {
   width: 36px;
@@ -3398,4 +3454,19 @@
   .dash-topbar-search-kbd {
     display: none;
   }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out forwards;
 }

@@ -1,44 +1,80 @@
 'use client'
 
-import { useState } from 'react'
-import { Search, Plane, Building2, TrendingUp, MapPin } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Search, Plane, Building2, MapPin } from 'lucide-react'
+import api from '@/lib/axios'
 
 interface Airport {
   code: string
   name: string
   city: string
   iata: string
-  dailyFlights: number
-  onTimeRate: number
-  terminals: number
-  runways: number
+  country: string
+  dailyFlights: number | string
+  onTimeRate: number | null
+  terminals: number | string
 }
 
-const airports: Airport[] = [
-  { code: 'HAN', name: 'Noi Bai International Airport', city: 'Hanoi', iata: 'HAN', dailyFlights: 342, onTimeRate: 87.5, terminals: 2, runways: 2 },
-  { code: 'DAD', name: 'Da Nang International Airport', city: 'Da Nang', iata: 'DAD', dailyFlights: 218, onTimeRate: 91.2, terminals: 2, runways: 1 },
-  { code: 'SGN', name: 'Tan Son Nhat International Airport', city: 'Ho Chi Minh City', iata: 'SGN', dailyFlights: 456, onTimeRate: 84.3, terminals: 2, runways: 2 },
-  { code: 'CXR', name: 'Cam Ranh International Airport', city: 'Nha Trang', iata: 'CXR', dailyFlights: 128, onTimeRate: 93.1, terminals: 1, runways: 1 },
-  { code: 'PQC', name: 'Phu Quoc International Airport', city: 'Phu Quoc', iata: 'PQC', dailyFlights: 96, onTimeRate: 90.8, terminals: 1, runways: 1 },
-  { code: 'HPQ', name: 'Cat Bi International Airport', city: 'Hai Phong', iata: 'HPH', dailyFlights: 72, onTimeRate: 92.4, terminals: 1, runways: 1 },
-  { code: 'VII', name: 'Vinh International Airport', city: 'Vinh', iata: 'VII', dailyFlights: 34, onTimeRate: 95.2, terminals: 1, runways: 1 },
-  { code: 'BMV', name: 'Buon Ma Thuot Airport', city: 'Buon Ma Thuot', iata: 'BMV', dailyFlights: 28, onTimeRate: 94.7, terminals: 1, runways: 1 },
-]
+interface BackendAirport {
+  code?: string
+  name?: string
+  city?: string
+  country?: string
+}
 
-function getOnTimeColor(rate: number) {
+function getOnTimeColor(rate: number | null) {
+  if (rate === null) return 'text-slate-500 bg-slate-50'
   if (rate >= 90) return 'text-emerald-600 bg-emerald-50'
   if (rate >= 85) return 'text-amber-600 bg-amber-50'
   return 'text-red-600 bg-red-50'
 }
 
-function getOnTimeBarColor(rate: number) {
+function getOnTimeBarColor(rate: number | null) {
+  if (rate === null) return 'bg-slate-300'
   if (rate >= 90) return 'bg-emerald-500'
   if (rate >= 85) return 'bg-amber-500'
   return 'bg-red-500'
 }
 
+function mapBackendAirport(a: BackendAirport): Airport {
+  return {
+    code: a.code || 'N/A',
+    name: a.name || 'Unknown Airport',
+    city: a.city || 'N/A',
+    country: a.country || '',
+    iata: a.code || 'N/A',
+    dailyFlights: 'N/A',
+    onTimeRate: null,
+    terminals: 'N/A',
+  }
+}
+
 export default function AirportsPage() {
   const [searchQuery, setSearchQuery] = useState('')
+  const [airports, setAirports] = useState<Airport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadAirports() {
+      try {
+        setLoading(true)
+        const res = await api.get('/api/airports')
+        if (mounted) setAirports(Array.isArray(res.data) ? res.data.map(mapBackendAirport) : [])
+      } catch (err: unknown) {
+        if (mounted) setError(err instanceof Error ? err.message : 'Cannot load airports')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadAirports()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const filteredAirports = airports.filter((airport) =>
     searchQuery === '' ||
@@ -83,26 +119,26 @@ export default function AirportsPage() {
                     <span className="text-lg font-bold text-[#0066ff]">{airport.code}</span>
                   </div>
                   <div className={`px-2 py-1 rounded-lg text-xs font-semibold ${getOnTimeColor(airport.onTimeRate)}`}>
-                    {airport.onTimeRate}%
+                    {airport.onTimeRate === null ? 'N/A' : `${airport.onTimeRate}%`}
                   </div>
                 </div>
 
                 <h3 className="text-sm font-semibold text-[#0f172a] mb-0.5 line-clamp-1">{airport.name}</h3>
                 <div className="flex items-center gap-1 text-xs text-[#64748b] mb-4">
                   <MapPin className="w-3 h-3" />
-                  {airport.city} · {airport.iata}
+                  {airport.city} · {airport.country || airport.iata}
                 </div>
 
                 {/* On-Time Rate Bar */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-[#64748b]">On-Time Rate</span>
-                    <span className="font-medium text-[#334155]">{airport.onTimeRate}%</span>
+                    <span className="font-medium text-[#334155]">{airport.onTimeRate === null ? 'N/A' : `${airport.onTimeRate}%`}</span>
                   </div>
                   <div className="w-full h-1.5 bg-[#f1f5f9] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${getOnTimeBarColor(airport.onTimeRate)}`}
-                      style={{ width: `${airport.onTimeRate}%` }}
+                      style={{ width: `${airport.onTimeRate ?? 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -129,7 +165,20 @@ export default function AirportsPage() {
           ))}
         </div>
 
-        {filteredAirports.length === 0 && (
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="text-center py-16">
+            <Building2 className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3 animate-pulse" />
+            <p className="text-[#64748b] font-medium">Loading airports...</p>
+          </div>
+        )}
+
+        {!loading && filteredAirports.length === 0 && (
           <div className="text-center py-16">
             <Building2 className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3" />
             <p className="text-[#64748b] font-medium">No airports found</p>

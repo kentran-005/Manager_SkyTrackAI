@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Search, Plus, Edit3, Trash2, ChevronDown, X, Save } from "lucide-react";
+import api from "@/lib/axios";
 
 interface Airport {
   id?: number;
@@ -32,8 +33,7 @@ export default function AirportsManagement() {
 
   const fetchAirports = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/airports");
-      const data = await res.json();
+      const { data } = await api.get("/api/airports");
       setAirports(data);
     } catch (error) {
       console.error("Lỗi tải sân bay:", error);
@@ -49,17 +49,13 @@ export default function AirportsManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const url = editingId ? `http://localhost:8080/api/airports/${editingId}` : "http://localhost:8080/api/airports";
-    const method = editingId ? "PUT" : "POST";
 
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) throw new Error("Failed to save airport");
+      if (editingId) {
+        await api.put(`/api/airports/${editingId}`, form);
+      } else {
+        await api.post("/api/airports", form);
+      }
 
       setForm(emptyForm);
       setEditingId(null);
@@ -81,7 +77,7 @@ export default function AirportsManagement() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa sân bay này?")) return;
 
     try {
-      await fetch(`http://localhost:8080/api/airports/${id}`, { method: "DELETE" });
+      await api.delete(`/api/airports/${id}`);
       fetchAirports();
     } catch (error) {
       alert("Lỗi khi xóa sân bay!");

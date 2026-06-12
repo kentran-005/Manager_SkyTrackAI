@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Search,
   Plane,
@@ -15,6 +16,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  MapPinned,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────
@@ -325,6 +327,7 @@ function SelectDropdown({ options, value, onChange }: {
 // Main Page
 // ─────────────────────────────────────────────
 export default function SearchFlightPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAirline, setSelectedAirline] = useState('All Airlines');
   const [selectedAirport, setSelectedAirport] = useState('All Airports');
@@ -336,6 +339,12 @@ export default function SearchFlightPage() {
 
   const handlePopularSearch = (tag: string) => {
     setSearchQuery(tag);
+  };
+
+  const openLiveMap = (flightCode: string) => {
+    const code = flightCode.trim();
+    if (!code) return;
+    router.push(`/user/live-map?flight=${encodeURIComponent(code)}`);
   };
 
   return (
@@ -381,7 +390,11 @@ export default function SearchFlightPage() {
           />
 
           {/* Search button */}
-          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm shadow-blue-200 ml-auto">
+          <button
+            type="button"
+            onClick={() => openLiveMap(searchQuery)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm shadow-blue-200 ml-auto"
+          >
             <Search className="w-4 h-4" />
             Search
           </button>
@@ -596,6 +609,15 @@ export default function SearchFlightPage() {
                       <button className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
                         <Eye className="w-3.5 h-3.5" />
                         View Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openLiveMap(flight.code)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <MapPinned className="w-3.5 h-3.5" />
+                        Live Map
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <button className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
                         <Bookmark className="w-4 h-4" />

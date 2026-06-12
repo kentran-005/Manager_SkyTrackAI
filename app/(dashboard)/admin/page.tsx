@@ -5,6 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
+import api from "@/lib/axios";
 
 // ── Data ──
 const TREND_DATA = [
@@ -57,9 +58,8 @@ export default function AdminDashboard() {
 
   // GỌI API LẤY SỐ LIỆU THỐNG KÊ TỪ SPRING BOOT
   useEffect(() => {
-    fetch("http://localhost:8080/api/dashboard/stats")
-      .then(res => res.json())
-      .then(data => setStats(data))
+    api.get("/api/dashboard/stats")
+      .then(res => setStats(res.data))
       .catch(err => console.error("Lỗi tải thống kê:", err));
   }, []);
 
@@ -79,12 +79,7 @@ export default function AdminDashboard() {
     setAiInput("");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: question }),
-      });
-      const data = await res.json();
+      const { data } = await api.post("/api/ai/chat", { question });
       const answer = data.answer || "Sorry, I couldn't get a response.";
       setAiMessages(prev => [...prev, { q: question, a: answer }]);
     } catch {

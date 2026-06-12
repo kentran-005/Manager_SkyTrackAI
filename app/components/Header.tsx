@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 
 const NAV_LINKS = [
   {
@@ -50,6 +51,32 @@ const NAV_LINKS = [
 
 export default function Header() {
   const pathname = usePathname()
+  const [isDark, setIsDark] = useState(false)
+
+  // Khởi tạo theme từ localStorage khi vừa load trang
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('skytrack-theme')
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setIsDark(true)
+      document.documentElement.classList.add('dark')
+    } else {
+      setIsDark(false)
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  // Hàm chuyển đổi sáng/tối
+  const toggleTheme = () => {
+    const newDark = !isDark
+    setIsDark(newDark)
+    if (newDark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('skytrack-theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('skytrack-theme', 'light')
+    }
+  }
 
   return (
     <header className="pub-header">
@@ -81,20 +108,28 @@ export default function Header() {
         ))}
       </nav>
 
-      {/* Search Bar */}
-      <div className="pub-search-container">
-        <span className="pub-search-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        </span>
-        <input type="text" placeholder="Search flights, airports..." className="pub-search-input" />
-        <span className="pub-search-shortcut">⌘K</span>
-      </div>
+      
 
       {/* Actions */}
       <div className="pub-actions">
-        <button className="mode-toggle">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M6.34 17.66l-1.41 1.41"></path><path d="M19.07 4.93l-1.41 1.41"></path></svg>
-        </button>
+        {/* Nút chuyển Dark/Light Mode */}
+        {/* <button className="mode-toggle" onClick={toggleTheme}>
+          {isDark ? (
+            // Icon Mặt trăng (Dark Mode)
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          ) : (
+            // Icon Mặt trời (Light Mode)
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path><path d="M12 20v2"></path>
+              <path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path>
+              <path d="M2 12h2"></path><path d="M20 12h2"></path>
+              <path d="M6.34 17.66l-1.41 1.41"></path><path d="M19.07 4.93l-1.41 1.41"></path>
+            </svg>
+          )}
+        </button> */}
         
         <Link href="/login">
           <button className="btn-login">Login</button>
