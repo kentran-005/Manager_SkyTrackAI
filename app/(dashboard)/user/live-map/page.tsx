@@ -1,83 +1,77 @@
-'use client';
+"use client";
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Loader2, Plane } from 'lucide-react';
-import FlightMap, { type Flight } from '@/app/components/FlightMap';
-import api from '@/lib/axios';
-
-interface RealtimeFlight {
-  icao24?: string;
-  callsign?: string;
-  originCountry?: string;
-  longitude?: number;
-  latitude?: number;
-  altitude?: number;
-  velocity?: number;
-  heading?: number;
-  onGround?: boolean;
-}
-
-function normalizeFlightCode(value: string) {
-  return value.trim().replace(/\s+/g, '').toUpperCase();
-}
-
-function toDashboardFlight(flight: RealtimeFlight): Flight | null {
-  if (typeof flight.latitude !== 'number' || typeof flight.longitude !== 'number') return null;
-
-  const callsign = flight.callsign?.trim() || flight.icao24 || 'UNKNOWN';
-  const icao24 = flight.icao24?.trim() || callsign;
-  const altitudeFeet = typeof flight.altitude === 'number' ? Math.round(flight.altitude * 3.28084) : 0;
-  const speedKmh = typeof flight.velocity === 'number' ? Math.round(flight.velocity * 3.6) : 0;
-
-  return {
-    id: icao24,
-    flightNumber: callsign,
-    airline: {
-      code: callsign.slice(0, 2).toUpperCase(),
-      name: flight.originCountry || 'OpenSky aircraft',
-    },
-    origin: flight.originCountry || 'LIVE',
-    destination: flight.onGround ? 'GROUND' : 'AIRBORNE',
-    latitude: flight.latitude,
-    longitude: flight.longitude,
-    heading: typeof flight.heading === 'number' ? flight.heading : 0,
-    altitude: altitudeFeet,
-    speed: speedKmh,
-    status: flight.onGround ? 'On ground' : 'Airborne',
-  };
-}
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle, CloudSun, Droplets, Eye, Gauge, Loader2, MapPinned, Plane, Radar, Wind } from "lucide-react";
+import FlightMap, { type Flight, type MapWeather } from "@/app/components/FlightMap";
+import api from "@/lib/axios";
+import { mapRealtimeFlight, type BackendAirport, type RealtimeFlight } from "@/lib/skytrack-data";
 
 function findFlight(flights: Flight[], query: string) {
-  const normalizedQuery = normalizeFlightCode(query);
+  const normalizedQuery = query.trim().replace(/\s+/g, "").toUpperCase();
   if (!normalizedQuery) return null;
 
   return flights.find((flight) => {
-    const flightNumber = normalizeFlightCode(flight.flightNumber);
-    const icao24 = normalizeFlightCode(String(flight.id));
-    return flightNumber === normalizedQuery || icao24 === normalizedQuery || flightNumber.includes(normalizedQuery);
+    const normalizedFlight = flight.flightNumber.replace(/\s+/g, "").toUpperCase();
+    const normalizedId = String(flight.id).replace(/\s+/g, "").toUpperCase();
+    return normalizedFlight === normalizedQuery || normalizedId === normalizedQuery || normalizedFlight.includes(normalizedQuery);
   }) ?? null;
+}
+
+interface WeatherApiResponse {
+  error?: string;
+  name?: string;
+  main?: { temp?: number; feels_like?: number; humidity?: number };
+  weather?: Array<{ description?: string }>;
+  wind?: { speed?: number };
+  visibility?: number;
+}
+
+interface ManagedAirport {
+  id: string;
+  code: string;
+  name: string;
+  city: string;
+  country: string;
 }
 
 function UserLiveMapContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialFlight = searchParams.get('flight') ?? '';
+  const initialFlight = searchParams.get("flight") ?? "";
+
   const [flights, setFlights] = useState<Flight[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
   const [searchTerm, setSearchTerm] = useState(initialFlight);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [weatherVisible, setWeatherVisible] = useState(false);
+  const [weatherUpdated, setWeatherUpdated] = useState<Date | null>(null);
+  const [airports, setAirports] = useState<ManagedAirport[]>([]);
+  const [selectedAirportId, setSelectedAirportId] = useState("");
+  const [airportsLoading, setAirportsLoading] = useState(true);
+  const [airportsError, setAirportsError] = useState("");
+  const [weather, setWeather] = useState<MapWeather>({
+    city: "Select an airport",
+    temperature: null,
+    feelsLike: null,
+    description: "No weather data",
+    humidity: null,
+    windSpeed: null,
+    visibility: null,
+    loading: true,
+    error: "",
+  });
 
   useEffect(() => {
     let mounted = true;
 
     async function loadFlights() {
       try {
-        const res = await api.get('/api/realtime-flights');
+        const res = await api.get("/api/realtime-flights");
         const nextFlights = Array.isArray(res.data)
-          ? (res.data.map(toDashboardFlight).filter(Boolean) as Flight[])
+          ? (res.data.map((flight: RealtimeFlight) => mapRealtimeFlight(flight)).filter(Boolean) as Flight[])
           : [];
 
         if (!mounted) return;
@@ -91,7 +85,7 @@ function UserLiveMapContent() {
           setMessage(null);
         } else if (initialFlight) {
           setSelectedFlight(null);
-          setMessage(`Flight ${initialFlight.toUpperCase()} is not visible in current OpenSky traffic.`);
+          setMessage(`Flight ${initialFlight.toUpperCase()} is not visible in current traffic.`);
         } else if (nextFlights.length > 0) {
           setSelectedFlight((current) => current ?? nextFlights[0]);
         }
@@ -99,7 +93,7 @@ function UserLiveMapContent() {
         if (mounted) {
           setFlights([]);
           setSelectedFlight(null);
-          setMessage('Cannot connect to realtime flight API. Start the Spring Boot backend on port 8080.');
+          setMessage("Cannot connect to realtime flight API. Please check the backend on port 8080.");
         }
       } finally {
         if (mounted) setLoading(false);
@@ -115,16 +109,110 @@ function UserLiveMapContent() {
     };
   }, [initialFlight]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadManagedAirports() {
+      try {
+        const response = await api.get("/api/airports");
+        const nextAirports = Array.isArray(response.data)
+          ? (response.data as BackendAirport[])
+              .filter((airport) => Boolean(airport.city?.trim()))
+              .map((airport) => ({
+                id: String(airport.id ?? airport.code ?? airport.city),
+                code: airport.code?.trim() || "N/A",
+                name: airport.name?.trim() || "Unknown airport",
+                city: airport.city?.trim() || "",
+                country: airport.country?.trim() || "Vietnam",
+              }))
+          : [];
+        if (!mounted) return;
+        setAirports(nextAirports);
+        setSelectedAirportId((current) => current || nextAirports[0]?.id || "");
+        setAirportsError(nextAirports.length === 0 ? "No managed airports have a city configured." : "");
+      } catch (airportError: unknown) {
+        if (!mounted) return;
+        setAirports([]);
+        setAirportsError(airportError instanceof Error ? airportError.message : "Cannot load managed airports.");
+      } finally {
+        if (mounted) setAirportsLoading(false);
+      }
+    }
+
+    void loadManagedAirports();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedAirport = useMemo(
+    () => airports.find((airport) => airport.id === selectedAirportId) ?? null,
+    [airports, selectedAirportId],
+  );
+
+  useEffect(() => {
+    if (!selectedAirport) {
+      setWeather((current) => ({
+        ...current,
+        city: "Select an airport",
+        loading: false,
+        error: airportsLoading ? "" : airportsError || "No airport selected.",
+      }));
+      return;
+    }
+
+    const airport = selectedAirport;
+    let mounted = true;
+
+    async function loadWeather() {
+      setWeather((current) => ({ ...current, city: airport.city, loading: true, error: "" }));
+      try {
+        const response = await api.get(`/api/weather/${encodeURIComponent(airport.city)}`);
+        const data = (response.data ?? {}) as WeatherApiResponse;
+        if (!mounted) return;
+        if (data.error) throw new Error(data.error);
+        setWeather({
+          city: data.name || airport.city,
+          temperature: typeof data.main?.temp === "number" ? data.main.temp : null,
+          feelsLike: typeof data.main?.feels_like === "number" ? data.main.feels_like : null,
+          description: data.weather?.[0]?.description || "Weather condition unavailable",
+          humidity: typeof data.main?.humidity === "number" ? data.main.humidity : null,
+          windSpeed: typeof data.wind?.speed === "number" ? data.wind.speed : null,
+          visibility: typeof data.visibility === "number" ? data.visibility / 1000 : null,
+          loading: false,
+          error: "",
+        });
+        setWeatherUpdated(new Date());
+      } catch (weatherError: unknown) {
+        if (!mounted) return;
+        setWeather((current) => ({
+          ...current,
+          loading: false,
+          error: weatherError instanceof Error ? weatherError.message : "Cannot load weather data.",
+        }));
+      }
+    }
+
+    void loadWeather();
+    const interval = window.setInterval(loadWeather, 10 * 60 * 1000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [airportsError, airportsLoading, selectedAirport]);
+
   const airborneFlights = useMemo(
-    () => flights.filter((flight) => flight.status === 'Airborne').length,
+    () => flights.filter((flight) => flight.status === "Airborne").length,
     [flights],
   );
+
+  const groundedFlights = flights.length - airborneFlights;
 
   function handleSearchSubmit() {
     const query = searchTerm.trim();
     if (!query) {
       setMessage(null);
-      router.push('/user/live-map');
+      router.push("/user/live-map");
       return;
     }
 
@@ -136,90 +224,190 @@ function UserLiveMapContent() {
       setMessage(null);
     } else {
       setSelectedFlight(null);
-      setMessage(`Flight ${query.toUpperCase()} is not visible in current OpenSky traffic.`);
+      setMessage(`Flight ${query.toUpperCase()} is not visible in current traffic.`);
     }
   }
 
   return (
-    <div className="min-h-[calc(100vh-32px)] bg-[#070b13] p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Live Map</h1>
-          <p className="text-sm text-slate-400">Track realtime OpenSky aircraft and search by callsign or ICAO24.</p>
+    <div className="min-h-[calc(100vh-72px)] space-y-6 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_30%),linear-gradient(180deg,_#f8fafc,_#eef4ff)] p-4 sm:p-6 lg:p-8">
+      <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-950 px-6 py-7 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] sm:px-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-blue-100 backdrop-blur">
+              <Radar className="h-3.5 w-3.5" />
+              User live map
+            </div>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Track realtime aircraft with a cleaner control panel.</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+              Search by callsign or ICAO24, inspect the selected aircraft, and keep the map visible with enough context to make fast decisions.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 sm:min-w-[320px]">
+            <div className="rounded-3xl bg-white/8 p-4 backdrop-blur">
+              <Plane className="h-4 w-4 text-blue-300" />
+              <div className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-400">Total</div>
+              <div className="mt-1 text-2xl font-semibold">{flights.length}</div>
+            </div>
+            <div className="rounded-3xl bg-white/8 p-4 backdrop-blur">
+              <Gauge className="h-4 w-4 text-emerald-300" />
+              <div className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-400">Airborne</div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-300">{airborneFlights}</div>
+            </div>
+            <div className="rounded-3xl bg-white/8 p-4 backdrop-blur">
+              <MapPinned className="h-4 w-4 text-amber-300" />
+              <div className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-400">Ground</div>
+              <div className="mt-1 text-2xl font-semibold">{groundedFlights}</div>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <div className="rounded-xl border border-[#1f2b42] bg-[#0b101d] px-4 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total</div>
-            <div className="text-lg font-bold text-white">{flights.length}</div>
-          </div>
-          <div className="rounded-xl border border-[#1f2b42] bg-[#0b101d] px-4 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Airborne</div>
-            <div className="text-lg font-bold text-blue-300">{airborneFlights}</div>
-          </div>
-          <div className="rounded-xl border border-[#1f2b42] bg-[#0b101d] px-4 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Updated</div>
-            <div className="text-lg font-bold text-white">{lastUpdated?.toLocaleTimeString('en-GB') ?? '--:--'}</div>
-          </div>
-        </div>
-      </div>
+      </section>
 
       {message && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {message}
         </div>
       )}
 
-      <div className="relative h-[calc(100vh-220px)] min-h-[560px] overflow-hidden rounded-2xl border border-[#1f2b42] bg-[#0b101d]">
-        {loading && (
-          <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-[#070b13]/70 text-white">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading realtime aircraft...
-          </div>
-        )}
-        <FlightMap
-          flights={flights}
-          selectedFlight={selectedFlight}
-          onSelect={(flight) => {
-            setSelectedFlight(flight);
-            setSearchTerm(flight.flightNumber);
-            setMessage(null);
-          }}
-          searchTerm={searchTerm}
-          onSearchTermChange={setSearchTerm}
-          onSearchSubmit={handleSearchSubmit}
-        />
-      </div>
-
-      {selectedFlight && (
-        <div className="mt-4 grid gap-4 rounded-2xl border border-[#1f2b42] bg-[#0b101d] p-4 text-sm text-slate-300 md:grid-cols-6">
-          <div className="flex items-center gap-3 md:col-span-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300">
-              <Plane className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="font-bold text-white">{selectedFlight.flightNumber}</div>
-              <div className="text-xs text-slate-500">{selectedFlight.airline?.name ?? 'OpenSky aircraft'}</div>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Position</div>
-            <div className="font-semibold text-white">{selectedFlight.latitude.toFixed(3)}, {selectedFlight.longitude.toFixed(3)}</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Altitude</div>
-            <div className="font-semibold text-white">{selectedFlight.altitude.toLocaleString()} ft</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Speed</div>
-            <div className="font-semibold text-white">{selectedFlight.speed.toLocaleString()} km/h</div>
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
-            <div className="font-semibold text-white">{selectedFlight.status}</div>
+      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[#0b101d] shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
+          <div className="relative h-[72vh] min-h-[620px]">
+            {loading && (
+              <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-[#070b13]/70 text-white">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Loading realtime aircraft...
+              </div>
+            )}
+            <FlightMap
+              flights={flights}
+              selectedFlight={selectedFlight}
+              onSelect={(flight) => {
+                setSelectedFlight(flight);
+                setSearchTerm(flight.flightNumber);
+                setMessage(null);
+              }}
+              searchTerm={searchTerm}
+              onSearchTermChange={setSearchTerm}
+              onSearchSubmit={handleSearchSubmit}
+              weather={weather}
+              onWeatherToggle={setWeatherVisible}
+            />
           </div>
         </div>
-      )}
+
+        <aside className="space-y-4">
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
+            <h2 className="text-lg font-semibold text-slate-950">Flight detail</h2>
+            {selectedFlight ? (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-3xl bg-slate-950 p-4 text-white">
+                  <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Callsign</div>
+                  <div className="mt-2 text-2xl font-semibold">{selectedFlight.flightNumber}</div>
+                  <div className="mt-1 text-sm text-slate-300">{selectedFlight.airline?.name ?? "OpenSky aircraft"}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Position</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">
+                      {selectedFlight.latitude.toFixed(3)}, {selectedFlight.longitude.toFixed(3)}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Heading</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{Math.round(selectedFlight.heading)}°</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Altitude</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{selectedFlight.altitude.toLocaleString()} ft</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Speed</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{selectedFlight.speed.toLocaleString()} km/h</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-slate-500">Select a marker to inspect it here.</p>
+            )}
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-blue-50 to-cyan-50 p-5">
+            <h2 className="text-lg font-semibold text-slate-950">Search tips</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>Use callsigns like VNA220 or aircraft IDs like 3c4b1f.</li>
+              <li>Click the Track button in the map header to focus the map.</li>
+              <li>Layer buttons let you switch context on and off quickly.</li>
+            </ul>
+          </div>
+
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
+            <div className="bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,.24),transparent_45%),linear-gradient(135deg,#0f172a,#172554)] p-5 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-300">Weather conditions</div>
+                  <h2 className="mt-2 text-lg font-semibold">{selectedAirport ? `${selectedAirport.code} · ${selectedAirport.city}` : weather.city}</h2>
+                  {selectedAirport && <div className="mt-1 text-xs text-slate-400">{selectedAirport.name}</div>}
+                </div>
+                <CloudSun className="h-7 w-7 text-amber-300" />
+              </div>
+              {weather.loading ? (
+                <div className="mt-5 h-20 animate-pulse rounded-2xl bg-white/[0.08]" />
+              ) : weather.error ? (
+                <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">{weather.error}</div>
+              ) : (
+                <div className="mt-5 flex items-end justify-between gap-4">
+                  <div className="text-5xl font-semibold tracking-tight">{weather.temperature === null ? "--" : `${Math.round(weather.temperature)}°C`}</div>
+                  <div className="text-right"><div className="text-sm capitalize text-blue-100">{weather.description}</div><div className="mt-1 text-xs text-slate-400">Feels like {weather.feelsLike === null ? "--" : `${Math.round(weather.feelsLike)}°C`}</div></div>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-3 divide-x divide-slate-100 p-4 text-center">
+              <div><Droplets className="mx-auto h-4 w-4 text-blue-500" /><div className="mt-2 text-sm font-semibold">{weather.humidity === null ? "--" : `${weather.humidity}%`}</div><div className="text-[10px] uppercase tracking-wider text-slate-400">Humidity</div></div>
+              <div><Wind className="mx-auto h-4 w-4 text-cyan-500" /><div className="mt-2 text-sm font-semibold">{weather.windSpeed === null ? "--" : `${weather.windSpeed.toFixed(1)} m/s`}</div><div className="text-[10px] uppercase tracking-wider text-slate-400">Wind</div></div>
+              <div><Eye className="mx-auto h-4 w-4 text-violet-500" /><div className="mt-2 text-sm font-semibold">{weather.visibility === null ? "--" : `${weather.visibility.toFixed(1)} km`}</div><div className="text-[10px] uppercase tracking-wider text-slate-400">Visibility</div></div>
+            </div>
+            <div className="border-t border-slate-100 p-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Managed airport</span>
+                <div className="relative mt-2">
+                  <select
+                    value={selectedAirportId}
+                    onChange={(event) => setSelectedAirportId(event.target.value)}
+                    disabled={airportsLoading || airports.length === 0}
+                    className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 pr-10 text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {airportsLoading && <option value="">Loading airports...</option>}
+                    {!airportsLoading && airports.length === 0 && <option value="">No airports available</option>}
+                    {airports.map((airport) => (
+                      <option key={airport.id} value={airport.id}>
+                        {airport.code} · {airport.name} ({airport.city})
+                      </option>
+                    ))}
+                  </select>
+                  <MapPinned className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-600" />
+                </div>
+              </label>
+              {airportsError && <p className="mt-2 text-xs leading-5 text-rose-600">{airportsError}</p>}
+              <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
+                <span>Updated {weatherUpdated?.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) ?? "--:--"}</span>
+                <span>{weatherVisible ? "Visible on map" : "Enable Weather on map"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Auto refresh</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">60 seconds</div>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Data is refetched on an interval so the live map stays current without forcing a full page reload.
+            </p>
+            <div className="mt-4 text-xs text-slate-400">
+              Last updated: {lastUpdated?.toLocaleTimeString("en-GB") ?? "--:--"}
+            </div>
+          </div>
+        </aside>
+      </section>
     </div>
   );
 }

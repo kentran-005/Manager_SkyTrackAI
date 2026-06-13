@@ -1,360 +1,322 @@
 "use client";
 
-import { ReactNode, useEffect, useState, Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import api from "@/lib/axios"; // Import axios đã cấu hình
+import { ArrowRight, Building2, Clock3, Loader2, Plane, Search, Sparkles, TriangleAlert } from "lucide-react";
+import api from "@/lib/axios";
+import {
+  type BackendFlight,
+  type FlightCard,
+  mapBackendFlight,
+  mapStatus,
+  normalizeCode,
+  normalizeText,
+} from "@/lib/skytrack-data";
 
-// ── Types ──
-interface Flight {
-  id: string;
-  flightNo: string;
-  airline: string;
-  airlineLogo: ReactNode;
-  status: "On Time" | "Delayed" | "Cancelled" | "Scheduled" | "Boarding";
-  from: { code: string; city: string; airport: string; time: string; date: string };
-  to:   { code: string; city: string; airport: string; time: string; date: string };
-  duration: string;
-  stops: string;
-  gate: string;
-  terminal: string;
-}
+const POPULAR_QUERIES = ["VN220", "VJ123", "HAN", "SGN", "QH301", "DAD"];
 
-interface BackendFlight {
-  id?: number | string;
-  flightCode?: string;
-  airline?: { name?: string; logo?: string };
-  departureAirport?: { code?: string; city?: string; name?: string };
-  arrivalAirport?: { code?: string; city?: string; name?: string };
-  departureTime?: string;
-  arrivalTime?: string;
-  status?: string;
-  price?: number;
-  type?: string;
-  gate?: string;
-  terminal?: string;
-}
-
-const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
-  "On Time":  { color: "#16a34a", bg: "#dcfce7" },
-  "Delayed":  { color: "#d97706", bg: "#fef3c7" },
-  "Cancelled":{ color: "#dc2626", bg: "#fee2e2" },
-  "Scheduled":{ color: "#2563eb", bg: "#dbeafe" },
-  "Boarding": { color: "#7c3aed", bg: "#ede9fe" },
+type SearchState = {
+  query: string;
+  results: FlightCard[];
+  loading: boolean;
+  error: string;
+  searched: boolean;
 };
 
-// Hàm chuyển đổi dữ liệu Backend sang Frontend
-function mapBackendFlight(f: BackendFlight): Flight {
-  const formatTime = (dateStr: string) => {
-    if (!dateStr) return { time: "N/A", date: "N/A" };
-    // Xử lý chuẩn_datetime của DB (2026-07-01T08:00:00) và của API (2026-07-01 08:00:00)
-    const normalizedDateStr = dateStr.replace(" ", "T"); 
-    const d = new Date(normalizedDateStr);
-    if (isNaN(d.getTime())) return { time: "N/A", date: "N/A" }; // Lỗi parse
-    
-    const time = d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
-    const date = d.getDate().toString().padStart(2, '0') + "/" + (d.getMonth() + 1).toString().padStart(2, '0') + "/" + d.getFullYear();
-    return { time, date };
-  };
-
-  const departure = formatTime(f.departureTime);
-  const arrival = formatTime(f.arrivalTime);
-
-  let duration = "N/A";
-  if (f.departureTime && f.arrivalTime) {
-    const normalizedDep = f.departureTime.replace(" ", "T");
-    const normalizedArr = f.arrivalTime.replace(" ", "T");
-    const diffMs = new Date(normalizedArr).getTime() - new Date(normalizedDep).getTime();
-    if (diffMs > 0) {
-      const diffMins = Math.round(diffMs / 60000);
-      const hours = Math.floor(diffMins / 60);
-      const mins = diffMins % 60;
-      duration = `${hours}h ${mins}m`;
-    }
-  }
-
-  const statusMap: Record<string, Flight["status"]> = {
-    "ON_TIME": "On Time",
-    "DELAYED": "Delayed",
-    "CANCELLED": "Cancelled",
-    "SCHEDULED": "Scheduled",
-    "BOARDING": "Boarding"
-  };
-
-  return {
-    id: f.id?.toString() || Math.random().toString(),
-    flightNo: f.flightCode || "N/A",
-    airline: f.airline?.name || "Unknown Airline",
-    airlineLogo: f.airline?.logo ? <img src={f.airline.logo} alt="logo" style={{width: 40, height: 40, objectFit: 'contain', background: '#fff', padding: 4, borderRadius: 8}}/> : "✈️",
-    status: statusMap[f.status] || "Scheduled",
-    // Kiểm tra nếu có object airport thì lấy, nếu không (từ AviationStack) thì để N/A
-    from: { 
-      code: f.departureAirport?.code || "N/A", 
-      city: f.departureAirport?.city || "N/A", 
-      airport: f.departureAirport?.name || "N/A", 
-      time: departure.time, 
-      date: departure.date 
-    },
-    to: { 
-      code: f.arrivalAirport?.code || "N/A", 
-      city: f.arrivalAirport?.city || "N/A", 
-      airport: f.arrivalAirport?.name || "N/A", 
-      time: arrival.time, 
-      date: arrival.date 
-    },
-    duration: duration,
-    stops: f.type || "Direct",
-    gate: f.gate || "N/A",
-    terminal: f.terminal || "N/A",
-  };
+async function searchFlights(query: string) {
+  const { data } = await api.get(`/api/flights/search?q=${encodeURIComponent(query)}`);
+  return Array.isArray(data) ? (data as BackendFlight[]).map(mapBackendFlight) : [];
 }
 
-// Tách component riêng để bọc Suspense
-function FlightSearchContent() {
-  const searchParams = useSearchParams();
-  const queryFromUrl = searchParams.get("q") || "";
+function SearchResultCard({ flight }: { flight: FlightCard }) {
+  const statusStyles: Record<string, { border: string; chip: string; dot: string }> = {
+    "On Time": { border: "border-emerald-200", chip: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+    Delayed: { border: "border-amber-200", chip: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
+    Cancelled: { border: "border-rose-200", chip: "bg-rose-50 text-rose-700", dot: "bg-rose-500" },
+    Scheduled: { border: "border-sky-200", chip: "bg-sky-50 text-sky-700", dot: "bg-sky-500" },
+    Boarding: { border: "border-violet-200", chip: "bg-violet-50 text-violet-700", dot: "bg-violet-500" },
+  };
 
-  const [query, setQuery] = useState(queryFromUrl);
-  const [results, setResults] = useState<Flight[]>([]);
-  const [searched, setSearched] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // Hàm search gọi API Backend
-  async function performSearch(searchQuery: string) {
-    const q = searchQuery.trim();
-    if (!q) return;
-    
-    setLoading(true);
-    setSearched(true);
-    setError("");
-    
-    try {
-      // Gọi API search chuyên dụng của Backend, truyền từ khóa qua param q
-      const res = await api.get(`/api/flights/search?q=${encodeURIComponent(q)}`);
-      const backendFlights = Array.isArray(res.data) ? res.data : [];
-
-      // Map dữ liệu Backend sang Structure của Frontend
-      const mappedResults = backendFlights.map(mapBackendFlight);
-      
-      setResults(mappedResults);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Cannot search flights");
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Tự động search khi có từ khóa từ URL (khi bấm search từ trang chủ)
-  useEffect(() => {
-    if (queryFromUrl) {
-      window.queueMicrotask(() => {
-        void performSearch(queryFromUrl);
-      });
-    }
-  }, [queryFromUrl]);
+  const status = statusStyles[mapStatus(flight.status)];
 
   return (
-    <>
-      <style precedence="default" href="/styles/public-search">{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        .main-search {
-          display: flex; gap: 10px; align-items: stretch;
-          background: #fff; border-radius: 14px;
-          padding: 14px 14px;
-          box-shadow: 0 1px 6px rgba(0,0,0,.07);
-          margin-bottom: 20px;
-        }
-        .main-search-field {
-          flex: 1; display: flex; align-items: center; gap: 10px;
-          border: 1.5px solid #e5e7eb; border-radius: 10px;
-          padding: 10px 14px; background: #fff;
-          font-size: 14px; color: #111827;
-          font-family: inherit;
-        }
-        .main-search-field input {
-          border: none; outline: none; font-size: 14px;
-          font-family: inherit; color: #111827; flex: 1;
-          background: transparent;
-        }
-        .search-btn-main {
-          background: #3b82f6; color: #fff; border: none;
-          border-radius: 10px; padding: 0 32px;
-          font-size: 14px; font-weight: 700;
-          cursor: pointer; font-family: inherit;
-          transition: background .18s;
-        }
-        .search-btn-main:hover { background: #2563eb; }
-
-        .flight-card {
-          background: #fff; border-radius: 16px;
-          box-shadow: 0 1px 8px rgba(0,0,0,.07);
-          margin-bottom: 16px; overflow: hidden;
-          border: 1.5px solid #f3f4f6;
-          transition: border-color .2s;
-        }
-        .flight-card:hover { border-color: #bfdbfe; }
-        .flight-card-body { padding: 24px 28px; }
-
-        .route-row {
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          align-items: center;
-          gap: 12px;
-          margin: 20px 0;
-        }
-
-        .detail-row {
-          display: flex; gap: 0;
-          border-top: 1px solid #f3f4f6;
-          padding-top: 16px; margin-top: 4px;
-        }
-        .detail-cell {
-          flex: 1;
-          border-right: 1px solid #f3f4f6;
-          padding: 0 16px;
-        }
-        .detail-cell:first-child { padding-left: 0; }
-        .detail-cell:last-child  { border-right: none; }
-
-        .view-btn {
-          width: 100%; background: #3b82f6; color: #fff;
-          border: none; border-radius: 0 0 14px 14px;
-          padding: 14px; font-size: 14px; font-weight: 700;
-          cursor: pointer; font-family: inherit;
-          transition: background .18s;
-        }
-        .view-btn:hover { background: #2563eb; }
-      `}</style>
-
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
-          Search Results
-        </h1>
-        {searched && (
-          <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
-            {loading ? "Searching..." : `${results.length} result${results.length !== 1 ? "s" : ""} found for "${query}"`}
-          </p>
-        )}
-
-        <div className="main-search">
-          <div className="main-search-field">
-            <span style={{ color: "#9ca3af", fontSize: 16 }}>✈</span>
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Flight code, airline, or airport code..."
-              onKeyDown={e => e.key === "Enter" && performSearch(query)}
-            />
-            <span style={{ color: "#d1d5db", fontSize: 18, cursor: "pointer" }}>⇄</span>
-          </div>
-          <button className="search-btn-main" onClick={() => performSearch(query)} disabled={loading}>
-            {loading ? "Searching..." : "Search"}
-          </button>
-        </div>
-
-        {error && (
-          <div style={{
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#b91c1c",
-            borderRadius: 12,
-            padding: "12px 14px",
-            marginBottom: 16,
-            fontSize: 14,
-            fontWeight: 600,
-          }}>
-            {error}
-          </div>
-        )}
-
-        {searched && !loading && results.length === 0 && (
-          <div style={{
-            background: "#fff", borderRadius: 16, padding: "48px 24px",
-            textAlign: "center", color: "#6b7280",
-            boxShadow: "0 1px 6px rgba(0,0,0,.06)",
-          }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>✈️</div>
-            <p style={{ fontWeight: 600, fontSize: 16, marginBottom: 6, color: "#374151" }}>No flights found</p>
-            <p style={{ fontSize: 14 }}>Try a different flight code, airline name, or airport code (e.g., SGN, HAN).</p>
-          </div>
-        )}
-
-        {results.map(flight => {
-          const st = STATUS_STYLE[flight.status] || STATUS_STYLE["Scheduled"];
-          return (
-            <div key={flight.id} className="flight-card">
-              <div className="flight-card-body">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 12, background: "#1a3a6b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>
-                      {flight.airlineLogo}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 18, color: "#111827" }}>{flight.flightNo}</div>
-                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>{flight.airline}</div>
-                    </div>
-                  </div>
-                  <span style={{ background: st.bg, color: st.color, borderRadius: 20, padding: "5px 14px", fontSize: 13, fontWeight: 600 }}>
-                    {flight.status}
-                  </span>
-                </div>
-
-                <div className="route-row">
-                  <div>
-                    <div style={{ fontSize: 36, fontWeight: 800, color: "#111827", letterSpacing: "-1px" }}>{flight.from.code}</div>
-                    <div style={{ fontSize: 13, color: "#374151", fontWeight: 500, marginTop: 2 }}>{flight.from.city}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{flight.from.airport}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginTop: 10 }}>{flight.from.time}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{flight.from.date}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 110 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#6b7280" }}>{flight.duration}</div>
-                    <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 6 }}>
-                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
-                      <span style={{ color: "#3b82f6", fontSize: 22 }}>✈</span>
-                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
-                    </div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{flight.stops}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 36, fontWeight: 800, color: "#111827", letterSpacing: "-1px" }}>{flight.to.code}</div>
-                    <div style={{ fontSize: 13, color: "#374151", fontWeight: 500, marginTop: 2 }}>{flight.to.city}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{flight.to.airport}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginTop: 10 }}>{flight.to.time}</div>
-                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{flight.to.date}</div>
-                  </div>
-                </div>
-
-                <div className="detail-row">
-                  {[
-                    { label: "Gate", value: flight.gate },
-                    { label: "Terminal", value: flight.terminal },
-                    { label: "Type", value: flight.stops },
-                    { label: "Status", value: flight.status, color: st.color },
-                  ].map(d => (
-                    <div key={d.label} className="detail-cell">
-                      <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500, marginBottom: 4 }}>{d.label}</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: d.color ?? "#111827" }}>{d.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button className="view-btn">View Flight Details</button>
+    <div className={`group rounded-3xl border bg-white/90 p-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.14)] ${status.border}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-950 text-xs font-semibold text-white">
+              {normalizeCode(flight.airlineCode || flight.flightNo).slice(0, 2) || "ST"}
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">{flight.flightNo}</h3>
+              <p className="text-sm text-slate-500">{flight.airline}</p>
             </div>
-          );
-        })}
+          </div>
+        </div>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${status.chip}`}>
+          <span className={`h-2 w-2 rounded-full ${status.dot}`} />
+          {flight.status}
+        </span>
       </div>
-    </>
+
+      <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="text-xs uppercase tracking-[0.18em] text-slate-400">From</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{flight.from.code}</div>
+          <div className="text-sm text-slate-500">{flight.from.city}</div>
+        </div>
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <ArrowRight className="h-4 w-4" />
+          <span className="text-[11px] font-mono">{flight.duration}</span>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3 text-right">
+          <div className="text-xs uppercase tracking-[0.18em] text-slate-400">To</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{flight.to.code}</div>
+          <div className="text-sm text-slate-500">{flight.to.city}</div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4 text-sm">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="flex items-center gap-2 text-slate-400">
+            <Clock3 className="h-4 w-4" />
+            <span>Departure</span>
+          </div>
+          <div className="mt-1 font-semibold text-slate-950">{flight.from.time}</div>
+          <div className="text-xs text-slate-500">{flight.from.date}</div>
+        </div>
+          <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="flex items-center gap-2 text-slate-400">
+            <Plane className="h-4 w-4" />
+            <span>Gate</span>
+          </div>
+          <div className="mt-1 font-semibold text-slate-950">{flight.gate}</div>
+          <div className="text-xs text-slate-500">{flight.terminal}</div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="flex items-center gap-2 text-slate-400">
+            <Building2 className="h-4 w-4" />
+            <span>Route</span>
+          </div>
+          <div className="mt-1 font-semibold text-slate-950">{flight.stops}</div>
+          <div className="text-xs text-slate-500">Direct/Transit</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// Bọc trong Suspense để tránh lỗi Next.js khi dùng useSearchParams
-export default function FlightSearch() {
+function FlightSearchContent() {
+  const searchParams = useSearchParams();
+  const queryFromUrl = searchParams.get("q") ?? "";
+  const [state, setState] = useState<SearchState>({
+    query: queryFromUrl,
+    results: [],
+    loading: false,
+    error: "",
+    searched: false,
+  });
+
+  const searchHints = useMemo(() => {
+    const base = queryFromUrl.trim() || state.query.trim();
+    const hint = normalizeCode(base);
+    return POPULAR_QUERIES.filter((item) => normalizeCode(item).includes(hint) || hint === "");
+  }, [queryFromUrl, state.query]);
+
+  useEffect(() => {
+    if (!queryFromUrl.trim()) return;
+
+    let mounted = true;
+    setState((current) => ({ ...current, query: queryFromUrl, loading: true, searched: true, error: "" }));
+
+    void searchFlights(queryFromUrl)
+      .then((results) => {
+        if (!mounted) return;
+        setState((current) => ({ ...current, results, loading: false, error: "" }));
+      })
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        setState((current) => ({
+          ...current,
+          results: [],
+          loading: false,
+          error: error instanceof Error ? error.message : "Cannot search flights right now.",
+        }));
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [queryFromUrl]);
+
+  async function handleSearch(value: string) {
+    const query = normalizeText(value);
+    if (!query) return;
+
+    setState((current) => ({ ...current, query, loading: true, searched: true, error: "" }));
+
+    try {
+      const results = await searchFlights(query);
+      setState((current) => ({ ...current, results, loading: false, error: "" }));
+    } catch (error: unknown) {
+      setState((current) => ({
+        ...current,
+        results: [],
+        loading: false,
+        error: error instanceof Error ? error.message : "Cannot search flights right now.",
+      }));
+    }
+  }
+
   return (
-    <Suspense fallback={<div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading search...</div>}>
+    <div className="mx-auto max-w-7xl px-4 py-8 lg:px-6">
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.16),_transparent_42%),linear-gradient(135deg,_#0f172a,_#111827_40%,_#1e293b)] p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] lg:p-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-blue-100 backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5" />
+            Fast backend flight search
+          </div>
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Search flights, routes, airports and real-time status in one place.
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+            Query the backend directly and get structured flight cards with route, gate, timing and status details.
+          </p>
+
+          <div className="mt-6 rounded-3xl border border-white/10 bg-white/8 p-3 backdrop-blur-xl">
+            <div className="flex flex-col gap-3 md:flex-row">
+              <div className="flex flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  value={state.query}
+                  onChange={(event) => setState((current) => ({ ...current, query: event.target.value }))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleSearch(state.query);
+                    }
+                  }}
+                  placeholder="Try VN220, SGN, HAN, VJ123..."
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSearch(state.query)}
+                disabled={state.loading}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {state.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Search
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            {searchHints.map((hint) => (
+              <button
+                key={hint}
+                type="button"
+                onClick={() => void handleSearch(hint)}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                {hint}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_12px_48px_rgba(15,23,42,0.08)]">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-3xl bg-slate-950 p-4 text-white">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Query</div>
+              <div className="mt-2 text-2xl font-semibold">{state.query.trim() || "Ready"}</div>
+            </div>
+            <div className="rounded-3xl bg-slate-50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Status</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{state.loading ? "Searching" : `${state.results.length}`}</div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-gradient-to-br from-blue-50 to-cyan-50 p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <TriangleAlert className="h-4 w-4 text-blue-500" />
+              Backend notes
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Results are fetched from <code>/api/flights/search</code>. If the backend is down, you will get a clear inline error instead of a broken page.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Quick tips</div>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>Search by flight code, airline or airport code.</li>
+              <li>Press Enter to search immediately.</li>
+              <li>Use public search or the user live map to inspect a tracked flight.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        {state.error && (
+          <div className="mb-5 rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+            {state.error}
+          </div>
+        )}
+
+        {state.searched && !state.loading && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">Search results</h2>
+              <p className="text-sm text-slate-500">
+                {state.results.length > 0
+                  ? `${state.results.length} result${state.results.length > 1 ? "s" : ""} found for "${state.query.trim()}"`
+                  : `No results found for "${state.query.trim()}"`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {state.loading && (
+          <div className="grid gap-4">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="animate-pulse rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="h-5 w-32 rounded bg-slate-200" />
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="h-20 rounded-2xl bg-slate-100" />
+                  <div className="h-20 rounded-2xl bg-slate-100" />
+                  <div className="h-20 rounded-2xl bg-slate-100" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!state.loading && state.results.length > 0 && (
+          <div className="grid gap-4">
+            {state.results.map((flight) => (
+              <SearchResultCard key={flight.id} flight={flight} />
+            ))}
+          </div>
+        )}
+
+        {!state.loading && state.searched && state.results.length === 0 && !state.error && (
+          <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
+            <Search className="mx-auto h-10 w-10 text-slate-300" />
+            <p className="mt-4 text-lg font-semibold text-slate-950">No flight matched your search.</p>
+            <p className="mt-2 text-sm text-slate-500">Try a flight code, airline, or an airport code like HAN or SGN.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading search...</div>}>
       <FlightSearchContent />
     </Suspense>
   );

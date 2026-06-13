@@ -1,214 +1,199 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/authContext";
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
-  LayoutDashboard,
+  Bell,
+  Bot,
   Building2,
+  LayoutDashboard,
+  LogOut,
+  MapIcon,
+  Menu,
+  MessageSquare,
   Plane,
   PlaneTakeoff,
+  Radar,
+  Search,
+  Settings,
+  Sparkles,
+  Ticket,
+  UserCircle,
   Users,
   UsersRound,
-  Bot,
-  Settings,
-  Ticket,
-  Search,
-  Bell,
-  MessageSquare,
-  UserCircle,
-  LogOut,
-  Menu,
   X,
-  Sparkles,
-  MapIcon,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+  type LucideIcon,
+} from 'lucide-react'
+import { useAuth } from '@/lib/authContext'
 
 interface NavLink {
-  icon: LucideIcon;
-  label: string;
-  href: string;
-  badge?: number;
+  icon: LucideIcon
+  label: string
+  href: string
+  badge?: number
 }
 
 const ADMIN_LINKS: NavLink[] = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/admin" },
-  { icon: Building2, label: "Airports", href: "/admin/airports" },
-  { icon: Plane, label: "Airlines", href: "/admin/airlines" },
-  { icon: PlaneTakeoff, label: "Flights", href: "/admin/flights" },
-  { icon: Users, label: "Passengers", href: "/admin/passengers" },
-  { icon: UsersRound, label: "Users", href: "/admin/users" },
-  { icon: Bot, label: "AI Summary", href: "/admin/ai" },
-  { icon: Settings, label: "Settings", href: "/admin/settings" },
-];
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/admin' },
+  { icon: Building2, label: 'Airports', href: '/admin/airports' },
+  { icon: Plane, label: 'Airlines', href: '/admin/airlines' },
+  { icon: PlaneTakeoff, label: 'Flights', href: '/admin/flights' },
+  { icon: Users, label: 'Passengers', href: '/admin/passengers' },
+  { icon: UsersRound, label: 'Users', href: '/admin/users' },
+  { icon: Bot, label: 'AI Summary', href: '/admin/ai' },
+  { icon: Settings, label: 'Settings', href: '/admin/settings' },
+]
 
 const USER_LINKS: NavLink[] = [
-  { icon: Ticket, label: "My Flights", href: "/user" },
-  { icon: Search, label: "Search Flights", href: "/user/searchflight" },
-  { icon: MapIcon, label: "Live Map", href: "/user/live-map" },
-  { icon: Bell, label: "Notifications", href: "/user/notifications", badge: 5 },
-  { icon: MessageSquare, label: "AI Assistant", href: "/user/ai" },
-  { icon: UserCircle, label: "Profile", href: "/user/profile" },
-];
+  { icon: Ticket, label: 'My flights', href: '/user' },
+  { icon: Search, label: 'Search flights', href: '/user/searchflight' },
+  { icon: MapIcon, label: 'Live map', href: '/user/live-map' },
+  { icon: Bell, label: 'Notifications', href: '/user/notifications', badge: 3 },
+  { icon: MessageSquare, label: 'AI assistant', href: '/user/ai' },
+  { icon: UserCircle, label: 'Profile', href: '/user/profile' },
+]
+
+const PAGE_TITLES: Record<string, string> = {
+  '/user': 'Flight overview',
+  '/user/searchflight': 'Search flights',
+  '/user/live-map': 'Live map',
+  '/user/notifications': 'Notifications',
+  '/user/ai': 'AI assistant',
+  '/user/profile': 'Profile',
+  '/admin': 'Admin overview',
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { user, logout, isLoading } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname()
+  const router = useRouter()
+  const { user, logout, isLoading } = useAuth()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // 1. Kiểm tra trạng thái đăng nhập và phân quyền Route điều hướng
   useEffect(() => {
-    if (!isLoading) {
-      // Nếu chưa đăng nhập -> Bắt buộc đá về trang login
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      // Nếu đã đăng nhập nhưng User thường cố tình vào đường dẫn /admin
-      if (pathname.startsWith("/admin") && user.role !== "ADMIN") {
-        router.push("/user"); // Đá ngược về trang của user
-      }
+    if (isLoading) return
+    if (!user) {
+      router.replace('/login')
+      return
     }
-  }, [isLoading, user, pathname, router]);
+    if (pathname.startsWith('/admin') && user.role !== 'ADMIN') router.replace('/user')
+  }, [isLoading, pathname, router, user])
 
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [pathname]);
+  useEffect(() => setSidebarOpen(false), [pathname])
 
-  // Trong lúc đang load hoặc chưa có user (hoặc user thường cố vào admin), giữ trạng thái Loading chặn render giao diện trái phép
-  if (isLoading || !user || (pathname.startsWith("/admin") && user.role !== "ADMIN")) {
+  if (isLoading || !user || (pathname.startsWith('/admin') && user.role !== 'ADMIN')) {
     return (
-      <div className="dash-loading">
-        <div className="dash-loading-spinner" />
-        <p>Loading dashboard...</p>
+      <div className="grid min-h-screen place-items-center bg-[#f4f7fb]">
+        <div className="text-center">
+          <div className="relative mx-auto h-12 w-12">
+            <div className="absolute inset-0 animate-ping rounded-full border border-blue-400/40" />
+            <div className="absolute inset-2 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
+          </div>
+          <p className="mt-4 text-sm font-medium text-slate-500">Preparing your workspace...</p>
+        </div>
       </div>
-    );
+    )
   }
 
-  // 2. Logic hiển thị Sidebar: Dựa vào URL hiện tại thay vì chỉ dựa vào Role của Account
-  const isAdminRoute = pathname.startsWith("/admin");
-  const links = isAdminRoute && user.role === "ADMIN" ? ADMIN_LINKS : USER_LINKS;
-  const currentDisplayRole = isAdminRoute && user.role === "ADMIN" ? "ADMIN" : "USER";
+  const isAdminRoute = pathname.startsWith('/admin')
+  const links = isAdminRoute && user.role === 'ADMIN' ? ADMIN_LINKS : USER_LINKS
+  const displayRole = isAdminRoute && user.role === 'ADMIN' ? 'Administrator' : 'Flight member'
+  const pageTitle = PAGE_TITLES[pathname] ?? (isAdminRoute ? 'Administration' : 'Workspace')
 
   return (
-    <div className="dash-root">
-      {/* ── MOBILE OVERLAY ── */}
-      <div
-        className={`dash-overlay ${sidebarOpen ? "dash-overlay--visible" : ""}`}
-        onClick={() => setSidebarOpen(false)}
-      />
+    <div className="min-h-screen bg-[#f4f7fb] text-slate-950">
+      {sidebarOpen && <button type="button" aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      {/* ── SIDEBAR ── */}
-      <aside className={`dash-sidebar ${sidebarOpen ? "dash-sidebar--open" : ""}`}>
-        {/* Logo */}
-        <div className="dash-sidebar-logo">
-          <div className="dash-sidebar-logo-icon">
-            <Plane className="w-5 h-5" />
-          </div>
-          <div className="dash-sidebar-logo-text">
-            <span className="dash-sidebar-logo-title">
-              SkyTrack <span className="dash-sidebar-logo-ai">AI</span>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-white/10 bg-[#07111f] px-4 py-5 text-white shadow-2xl transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex items-center justify-between px-2">
+          <Link href={isAdminRoute ? '/admin' : '/user'} className="flex items-center gap-3">
+            <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-600/25">
+              <Radar className="absolute h-8 w-8 opacity-35" strokeWidth={1.4} />
+              <Plane className="h-4 w-4 -rotate-12" fill="currentColor" />
             </span>
-            <span className="dash-sidebar-logo-sub">Real-time Flight Tracking</span>
-          </div>
+            <span>
+              <span className="block text-[15px] font-bold">SkyTrack AI</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{isAdminRoute ? 'Control center' : 'Flight workspace'}</span>
+            </span>
+          </Link>
+          <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-white/10 hover:text-white lg:hidden">
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Role Badge */}
-        <div className="dash-sidebar-role">
-          <span className={`dash-sidebar-role-badge ${currentDisplayRole === "ADMIN" ? "dash-sidebar-role-badge--admin" : "dash-sidebar-role-badge--user"}`}>
-            {currentDisplayRole === "ADMIN" ? "ADMIN PANEL" : "USER PANEL"}
-          </span>
+        <div className="mt-7 flex items-center justify-between px-3">
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Navigation</span>
+          <span className="rounded-full border border-blue-400/20 bg-blue-400/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-blue-300">{user.role}</span>
         </div>
 
-        {/* Navigation */}
-        <nav className="dash-sidebar-nav">
+        <nav className="mt-3 space-y-1">
           {links.map((link) => {
-            const Icon = link.icon;
-            const isActive =
-              pathname === link.href ||
-              (link.href !== "/user" && link.href !== "/admin" && pathname.startsWith(link.href));
-
+            const Icon = link.icon
+            const active = pathname === link.href || (link.href !== '/user' && link.href !== '/admin' && pathname.startsWith(link.href))
             return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`dash-sidebar-link ${isActive ? "dash-sidebar-link--active" : ""}`}
-              >
-                <Icon className="dash-sidebar-link-icon" />
-                <span className="dash-sidebar-link-label">{link.label}</span>
-                {link.badge && link.badge > 0 && (
-                  <span className="dash-sidebar-link-badge">{link.badge}</span>
-                )}
+              <Link key={link.href} href={link.href} className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'}`}>
+                <Icon className={`h-[18px] w-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-blue-300'}`} />
+                <span className="flex-1">{link.label}</span>
+                {link.badge ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{link.badge}</span> : null}
               </Link>
-            );
+            )
           })}
         </nav>
 
-        {/* AI Promo */}
-        <div className="dash-sidebar-ai-card">
-          <div className="dash-sidebar-ai-card-icon">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <div className="dash-sidebar-ai-card-content">
-            <p className="dash-sidebar-ai-card-title">Ask SkyTrack AI</p>
-            <p className="dash-sidebar-ai-card-desc">Get flight insights instantly</p>
-          </div>
-          <Link href={currentDisplayRole === "ADMIN" ? "/admin/ai" : "/user/ai"} className="dash-sidebar-ai-card-btn">
-            Try Now
+        {!isAdminRoute && (
+          <Link href="/user/ai" className="group relative mt-auto overflow-hidden rounded-[22px] border border-blue-400/20 bg-blue-500/10 p-4">
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-500/20 blur-2xl" />
+            <Sparkles className="relative h-5 w-5 text-blue-300" />
+            <div className="relative mt-4 text-sm font-semibold">Ask SkyTrack AI</div>
+            <p className="relative mt-1 text-xs leading-5 text-slate-500">Get quick help with flights, routes and airport information.</p>
+            <div className="relative mt-4 text-xs font-bold text-blue-300 group-hover:text-white">Start a conversation →</div>
           </Link>
-        </div>
+        )}
 
-        {/* User + Logout */}
-        <div className="dash-sidebar-footer">
-          <div className="dash-sidebar-user">
-            <div className="dash-sidebar-user-avatar">
-              {user.name?.charAt(0).toUpperCase() || "U"}
+        <div className={`${isAdminRoute ? 'mt-auto' : 'mt-4'} rounded-[22px] border border-white/10 bg-white/[0.04] p-3`}>
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 text-sm font-bold text-white">
+              {user.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U'}
             </div>
-            <div className="dash-sidebar-user-info">
-              <span className="dash-sidebar-user-name">{user.name || user.email}</span>
-              <span className="dash-sidebar-user-role">
-                {user.role === "ADMIN" ? "Administrator" : "Premium User"}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">{user.name || user.email}</div>
+              <div className="text-[11px] text-slate-500">{displayRole}</div>
             </div>
+            <button type="button" onClick={logout} title="Sign out" className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-300">
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
-          <button onClick={logout} className="dash-sidebar-logout">
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
         </div>
       </aside>
 
-      {/* ── MAIN CONTENT ── */}
-      <div className="dash-main">
-        {/* Mobile Top Bar */}
-        <div className="dash-mobile-topbar">
-          <button
-            className="dash-mobile-menu-btn"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div className="dash-mobile-logo">
-            <Plane className="w-4 h-4 text-blue-500" />
-            <span className="dash-mobile-logo-text">
-              SkyTrack <span style={{ color: "#60a5fa" }}>AI</span>
-            </span>
+      <div className="min-h-screen lg:pl-[280px]">
+        <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 lg:hidden">
+              <Menu className="h-5 w-5" />
+            </button>
+            <div>
+              <div className="text-sm font-semibold text-slate-950">{pageTitle}</div>
+              <div className="hidden text-xs text-slate-400 sm:block">SkyTrack member workspace</div>
+            </div>
           </div>
-          <div className="dash-sidebar-user-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
-            {user.name?.charAt(0).toUpperCase() || "U"}
+          <div className="flex items-center gap-2">
+            {!isAdminRoute && (
+              <Link href="/user/searchflight" className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600 sm:flex">
+                <Search className="h-3.5 w-3.5" /> Find a flight
+              </Link>
+            )}
+            <Link href={isAdminRoute ? '/admin' : '/user/notifications'} aria-label={isAdminRoute ? 'Admin dashboard' : 'Open notifications'} className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600">
+              <Bell className="h-4 w-4" />
+              {!isAdminRoute && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-white" />}
+            </Link>
+            <Link href={isAdminRoute ? '/admin' : '/user/profile'} aria-label={isAdminRoute ? 'Admin profile' : 'Open profile'} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
+              {user.name?.charAt(0).toUpperCase() || 'U'}
+            </Link>
           </div>
-        </div>
-
-        <main className="dash-content">
-          {children}
-        </main>
+        </header>
+        <main className="min-h-[calc(100vh-72px)]">{children}</main>
       </div>
     </div>
-  );
+  )
 }

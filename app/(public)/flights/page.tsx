@@ -1,293 +1,235 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Search, Filter, Plane, ArrowRight, Clock } from 'lucide-react'
-import api from '@/lib/axios'
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Clock3, Loader2, Plane, Search, SlidersHorizontal } from "lucide-react";
+import api from "@/lib/axios";
+import { type BackendFlight, type FlightCard, mapBackendFlight, normalizeText } from "@/lib/skytrack-data";
 
-type FlightStatus = 'On Time' | 'Delayed' | 'Cancelled' | 'Scheduled' | 'Boarding'
+const FILTERS = ["All", "On Time", "Scheduled", "Boarding", "Delayed", "Cancelled"] as const;
 
-interface Flight {
-  code: string
-  airline: string
-  airlineColor: string
-  from: string
-  fromCity: string
-  to: string
-  toCity: string
-  departure: string
-  arrival: string
-  status: FlightStatus
-  aircraft: string
-  gate: string
-}
-
-interface BackendFlight {
-  flightCode?: string
-  airline?: { code?: string; name?: string }
-  departureAirport?: { code?: string; city?: string; name?: string }
-  arrivalAirport?: { code?: string; city?: string; name?: string }
-  departureTime?: string
-  arrivalTime?: string
-  status?: string
-  aircraft?: string
-  type?: string
-  gate?: string
-}
-
-const statusFilters: { label: string; value: FlightStatus | 'All' }[] = [
-  { label: 'All', value: 'All' },
-  { label: 'On Time', value: 'On Time' },
-  { label: 'Scheduled', value: 'Scheduled' },
-  { label: 'Boarding', value: 'Boarding' },
-  { label: 'Delayed', value: 'Delayed' },
-  { label: 'Cancelled', value: 'Cancelled' },
-]
-
-function getStatusBadge(status: FlightStatus) {
-  switch (status) {
-    case 'On Time':
-    case 'Boarding':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    case 'Scheduled':
-      return 'bg-blue-50 text-blue-700 border-blue-200'
-    case 'Delayed':
-      return 'bg-amber-50 text-amber-700 border-amber-200'
-    case 'Cancelled':
-      return 'bg-red-50 text-red-700 border-red-200'
-  }
-}
-
-function getStatusDot(status: FlightStatus) {
-  switch (status) {
-    case 'On Time':
-    case 'Boarding':
-      return 'bg-emerald-500'
-    case 'Scheduled':
-      return 'bg-blue-500'
-    case 'Delayed':
-      return 'bg-amber-500'
-    case 'Cancelled':
-      return 'bg-red-500'
-  }
-}
-
-function formatTime(value?: string) {
-  if (!value) return '--:--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value.slice(0, 5)
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-}
-
-function mapStatus(status?: string): FlightStatus {
-  switch (status) {
-    case 'ON_TIME':
-      return 'On Time'
-    case 'DELAYED':
-      return 'Delayed'
-    case 'CANCELLED':
-      return 'Cancelled'
-    case 'BOARDING':
-      return 'Boarding'
-    default:
-      return 'Scheduled'
-  }
-}
-
-function getAirlineColor(code?: string) {
-  if (code === 'VJ') return '#e63946'
-  if (code === 'QH') return '#2d9f4c'
-  return '#0066ff'
-}
-
-function mapBackendFlight(f: BackendFlight): Flight {
-  return {
-    code: f.flightCode || 'N/A',
-    airline: f.airline?.name || 'Unknown Airline',
-    airlineColor: getAirlineColor(f.airline?.code),
-    from: f.departureAirport?.code || 'N/A',
-    fromCity: f.departureAirport?.city || f.departureAirport?.name || 'N/A',
-    to: f.arrivalAirport?.code || 'N/A',
-    toCity: f.arrivalAirport?.city || f.arrivalAirport?.name || 'N/A',
-    departure: formatTime(f.departureTime),
-    arrival: formatTime(f.arrivalTime),
-    status: mapStatus(f.status),
-    aircraft: f.aircraft || f.type || 'N/A',
-    gate: f.gate || 'N/A',
-  }
+function mapFlights(data: unknown): FlightCard[] {
+  return Array.isArray(data) ? (data as BackendFlight[]).map(mapBackendFlight) : [];
 }
 
 export default function FlightsPage() {
-  const [activeFilter, setActiveFilter] = useState<FlightStatus | 'All'>('All')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [flights, setFlights] = useState<Flight[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [activeFilter, setActiveFilter] = useState<(typeof FILTERS)[number]>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [flights, setFlights] = useState<FlightCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
     async function loadFlights() {
       try {
-        setLoading(true)
-        const res = await api.get('/api/flights')
-        if (mounted) setFlights(Array.isArray(res.data) ? res.data.map(mapBackendFlight) : [])
+        setLoading(true);
+        setError("");
+        const res = await api.get("/api/flights");
+        if (mounted) setFlights(mapFlights(res.data));
       } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : 'Cannot load flights')
+        if (mounted) setError(err instanceof Error ? err.message : "Cannot load flights");
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) setLoading(false);
       }
     }
 
-    loadFlights()
+    loadFlights();
     return () => {
-      mounted = false
-    }
-  }, [])
+      mounted = false;
+    };
+  }, []);
 
-  const filteredFlights = flights.filter((flight) => {
-    const matchesFilter = activeFilter === 'All' || flight.status === activeFilter
-    const matchesSearch = searchQuery === '' ||
-      flight.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flight.airline.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flight.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flight.to.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flight.fromCity.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      flight.toCity.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  const filteredFlights = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return flights.filter((flight) => {
+      const matchesFilter = activeFilter === "All" || flight.status === activeFilter;
+      const matchesSearch =
+        query === "" ||
+        flight.flightNo.toLowerCase().includes(query) ||
+        flight.airline.toLowerCase().includes(query) ||
+        flight.from.code.toLowerCase().includes(query) ||
+        flight.to.code.toLowerCase().includes(query) ||
+        flight.from.city.toLowerCase().includes(query) ||
+        flight.to.city.toLowerCase().includes(query);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [activeFilter, flights, searchQuery]);
+
+  const summary = useMemo(() => {
+    const delayed = flights.filter((flight) => flight.status === "Delayed").length;
+    const onTime = flights.filter((flight) => flight.status === "On Time" || flight.status === "Boarding").length;
+    return { delayed, onTime };
+  }, [flights]);
 
   return (
-    <main className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Page Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f172a]">Flights</h1>
-          <p className="text-sm text-[#64748b] mt-1">Track and manage all active flights across Vietnam</p>
+    <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.08),_transparent_35%),linear-gradient(180deg,_#f8fafc,_#eef4ff)] p-4 sm:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-950 px-6 py-7 text-white shadow-[0_24px_80px_rgba(15,23,42,0.2)] sm:px-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-blue-200/80">Public Flights</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Track and explore flights with a cleaner, faster search flow.</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                Search backend flight records, filter by status, and inspect timing, route and gate information in a layout that is easier to scan.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:min-w-[300px]">
+              <div className="rounded-3xl bg-white/8 p-4 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Flights</div>
+                <div className="mt-2 text-3xl font-semibold">{flights.length}</div>
+              </div>
+              <div className="rounded-3xl bg-white/8 p-4 backdrop-blur">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delayed</div>
+                <div className="mt-2 text-3xl font-semibold text-amber-300">{summary.delayed}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8]" />
+        <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.08)] lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search flights, routes..."
+              placeholder="Search flights, route codes, airports..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-[#e2e8f0] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[#64748b]" />
-            {statusFilters.map((filter) => (
+
+          <div className="flex flex-wrap items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+            {FILTERS.map((filter) => (
               <button
-                key={filter.value}
-                onClick={() => setActiveFilter(filter.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  activeFilter === filter.value
-                    ? 'bg-[#0066ff] text-white shadow-sm'
-                    : 'bg-white text-[#64748b] border border-[#e2e8f0] hover:bg-[#f1f5f9]'
+                key={filter}
+                type="button"
+                onClick={() => setActiveFilter(filter)}
+                className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                  activeFilter === filter
+                    ? "bg-slate-950 text-white shadow"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {filter.label}
+                {filter}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Flight Count */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-[#64748b]">
-            Showing <span className="font-semibold text-[#0f172a]">{filteredFlights.length}</span> of {flights.length} flights
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm text-slate-600">
+            Showing <span className="font-semibold text-slate-950">{filteredFlights.length}</span> of {flights.length} flights
           </p>
+          <p className="text-sm text-slate-500">{summary.onTime} on time / boarding</p>
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         )}
 
-        {/* Flights Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredFlights.map((flight) => (
-            <div
-              key={flight.code}
-              className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
-            >
-              <div className="p-5">
-                {/* Flight Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: flight.airlineColor + '15', color: flight.airlineColor }}>
-                      <Plane className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-sm text-[#0f172a]">{flight.code}</span>
-                      <span className="text-xs text-[#94a3b8] ml-2">{flight.airline}</span>
-                    </div>
-                  </div>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadge(flight.status)}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(flight.status)}`}></span>
-                    {flight.status}
-                  </span>
-                </div>
-
-                {/* Route */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="text-center flex-1">
-                    <p className="text-lg font-bold text-[#0f172a]">{flight.from}</p>
-                    <p className="text-xs text-[#94a3b8] truncate">{flight.fromCity}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[#94a3b8]">
-                    <div className="w-8 h-px bg-[#e2e8f0]"></div>
-                    <ArrowRight className="w-4 h-4 text-[#0066ff]" />
-                    <div className="w-8 h-px bg-[#e2e8f0]"></div>
-                  </div>
-                  <div className="text-center flex-1">
-                    <p className="text-lg font-bold text-[#0f172a]">{flight.to}</p>
-                    <p className="text-xs text-[#94a3b8] truncate">{flight.toCity}</p>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[#f1f5f9]">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-[#94a3b8]" />
-                    <div>
-                      <p className="text-xs text-[#94a3b8]">Dep</p>
-                      <p className="text-xs font-medium text-[#334155]">{flight.departure}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[#94a3b8]">Aircraft</p>
-                    <p className="text-xs font-medium text-[#334155]">{flight.aircraft}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[#94a3b8]">Gate</p>
-                    <p className="text-xs font-medium text-[#334155]">{flight.gate}</p>
-                  </div>
+        {loading && (
+          <div className="grid gap-4">
+            {[0, 1, 2, 3].map((index) => (
+              <div key={index} className="animate-pulse rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="h-5 w-40 rounded bg-slate-200" />
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="h-24 rounded-2xl bg-slate-100" />
+                  <div className="h-24 rounded-2xl bg-slate-100" />
+                  <div className="h-24 rounded-2xl bg-slate-100" />
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {loading && (
-          <div className="text-center py-16">
-            <Plane className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3 animate-pulse" />
-            <p className="text-[#64748b] font-medium">Loading flights...</p>
+            ))}
           </div>
         )}
 
         {!loading && filteredFlights.length === 0 && (
-          <div className="text-center py-16">
-            <Plane className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3" />
-            <p className="text-[#64748b] font-medium">No flights found</p>
-            <p className="text-sm text-[#94a3b8] mt-1">Try adjusting your search or filters</p>
+          <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
+            <Plane className="mx-auto h-10 w-10 text-slate-300" />
+            <p className="mt-4 text-lg font-semibold text-slate-950">No flights found.</p>
+            <p className="mt-2 text-sm text-slate-500">Try another keyword or clear the filter to see the full list.</p>
+          </div>
+        )}
+
+        {!loading && filteredFlights.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {filteredFlights.map((flight) => (
+              <article
+                key={flight.id}
+                className="group rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_10px_32px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(15,23,42,0.12)]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                        <Plane className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-slate-950">{flight.flightNo}</h2>
+                        <p className="text-sm text-slate-500">{normalizeText(flight.airline)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
+                    {flight.status}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">From</div>
+                    <div className="mt-1 text-2xl font-semibold text-slate-950">{flight.from.code}</div>
+                    <div className="text-sm text-slate-500">{flight.from.city}</div>
+                    <div className="mt-2 text-xs text-slate-400">{flight.from.airport}</div>
+                  </div>
+                  <div className="flex flex-col items-center gap-2 text-slate-400">
+                    <ArrowRight className="h-4 w-4" />
+                    <span className="text-[11px] font-mono">{flight.duration}</span>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4 text-right">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">To</div>
+                    <div className="mt-1 text-2xl font-semibold text-slate-950">{flight.to.code}</div>
+                    <div className="text-sm text-slate-500">{flight.to.city}</div>
+                    <div className="mt-2 text-xs text-slate-400">{flight.to.airport}</div>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Clock3 className="h-4 w-4" />
+                      <span className="text-xs">Dep</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{flight.from.time}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Clock3 className="h-4 w-4" />
+                      <span className="text-xs">Arr</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{flight.to.time}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Gate</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{flight.gate}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Aircraft</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-950">{flight.aircraft}</div>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </div>
     </main>
-  )
+  );
 }
+

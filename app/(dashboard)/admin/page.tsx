@@ -264,7 +264,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="ai-messages" style={{ flex: 1 }}>
-            {aiMessages.length === 0 && <p style={{ fontSize: 12, color: "#d1d5db", textAlign: "center", padding: "16px 0" }}>Ask a question about today's flights</p>}
+            {aiMessages.length === 0 && <p style={{ fontSize: 12, color: "#d1d5db", textAlign: "center", padding: "16px 0" }}>Ask a question about today&apos;s flights</p>}
             {aiMessages.map((m, i) => (
               <div key={i} style={{ marginBottom: 10 }}>
                 <div style={{ background: "#eff6ff", borderRadius: "10px 10px 2px 10px", padding: "7px 11px", fontSize: 12, color: "#1d4ed8", marginBottom: 5, display: "inline-block", maxWidth: "90%", marginLeft: "auto", float: "right", clear: "both" }}>{m.q}</div>

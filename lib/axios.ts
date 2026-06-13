@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,11 +22,16 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message =
+    const status = error.response?.status;
+    const backendMessage =
       error.response?.data?.error ||
       error.response?.data?.message ||
-      error.message ||
-      'Cannot connect to SkyTrack backend';
+      error.message;
+
+    const message =
+      !error.response || status === 0 || error.code === 'ECONNABORTED'
+        ? 'Backend is unavailable. Please check the API server.'
+        : backendMessage || 'Cannot connect to SkyTrack backend';
 
     return Promise.reject(new Error(message));
   }

@@ -1,199 +1,124 @@
-"use client";
+'use client'
 
-import { Bot, Send, Sparkles, Plane, Clock, MapPin, TrendingUp, AlertTriangle, RotateCcw } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from 'react'
+import { Bot, Clock3, MapPin, Plane, RotateCcw, Send, Sparkles, TrendingUp } from 'lucide-react'
 
 interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  time: string;
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  time: string
 }
 
-const quickPrompts = [
-  { icon: Plane, label: "Flight status", prompt: "What's the current status of flight VN220?", color: "blue" },
-  { icon: Clock, label: "Delay info", prompt: "Are there any delays at SGN airport today?", color: "amber" },
-  { icon: MapPin, label: "Airport info", prompt: "Tell me about Noi Bai International Airport", color: "emerald" },
-  { icon: TrendingUp, label: "Statistics", prompt: "Show me today's flight statistics", color: "purple" },
-];
+const INITIAL_MESSAGES: Message[] = [{
+  id: 'welcome',
+  role: 'assistant',
+  content: 'Hello! I can help you understand flight status, airport information, delay patterns and routes. What would you like to check?',
+  time: 'Just now',
+}]
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: "Hello! I'm SkyTrack AI Assistant. I can help you with flight tracking, airport information, delay predictions, and more. How can I assist you today?",
-    time: "Just now",
-  },
-];
+const QUICK_PROMPTS = [
+  { icon: Plane, label: 'Check flight VN220', prompt: 'What is the current status of flight VN220?' },
+  { icon: Clock3, label: 'Delays at SGN', prompt: 'Are there any delays at SGN airport today?' },
+  { icon: MapPin, label: 'About Noi Bai', prompt: 'Tell me about Noi Bai International Airport' },
+  { icon: TrendingUp, label: 'Today statistics', prompt: 'Show me today flight statistics' },
+]
+
+function createResponse(message: string) {
+  const query = message.toLowerCase()
+  if (query.includes('vn220')) return 'VN220 is scheduled from SGN to HAN. For the most current operational status, open Flight Search or Live Map from the navigation.'
+  if (query.includes('delay') || query.includes('sgn')) return 'Delay information depends on the live backend feed. Use Flight Search to filter delayed flights, or Live Map to inspect aircraft currently visible around SGN.'
+  if (query.includes('noi bai') || query.includes('han')) return 'Noi Bai International Airport uses IATA code HAN and serves Hanoi. It has separate domestic and international terminal operations.'
+  if (query.includes('statistic') || query.includes('stats')) return 'Your overview dashboard shows the latest flight, delay and passenger statistics returned by the backend service.'
+  return `I can help with “${message}”. This assistant is currently in guided demo mode, so live operational answers should be confirmed in Flight Search or Live Map.`
+}
 
 export default function AIAssistantPage() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
+  const [input, setInput] = useState('')
+  const [typing, setTyping] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, typing])
 
-  const simulateResponse = (userMessage: string) => {
-    setIsTyping(true);
+  useEffect(() => () => {
+    if (timerRef.current) window.clearTimeout(timerRef.current)
+  }, [])
 
-    setTimeout(() => {
-      let response = "";
-      const msg = userMessage.toLowerCase();
-
-      if (msg.includes("vn220")) {
-        response = "Flight VN220 (Vietnam Airlines) is currently **On Time**\n\n• Route: SGN → HAN\n• Departure: 10:30 (Scheduled)\n• Arrival: 12:45\n• Aircraft: Airbus A321\n• Gate: A3\n\nThe flight is proceeding as scheduled. Would you like to track it on the live map?";
-      } else if (msg.includes("delay") || msg.includes("sgn")) {
-        response = "Here's the current delay status at SGN (Tan Son Nhat Intl)\n\n• **2 flights delayed** in the next 3 hours\n• Average delay: 25 minutes\n• VJ123 (SGN→DAD): Delayed 30 min\n• VN148 (SGN→HAN): Delayed 15 min\n\nWeather conditions are clear, delays are due to air traffic congestion.";
-      } else if (msg.includes("noi bai") || msg.includes("han")) {
-        response = "**Noi Bai International Airport (HAN)**\n\n• Location: Hanoi, Vietnam\n• IATA: HAN / ICAO: VVNB\n• Terminals: T1 (Domestic), T2 (International)\n• Runways: 2 (11L/29R, 11R/29L)\n• Current weather: 32°C, Partly Cloudy\n• Visibility: 10 km\n• On-time rate today: 87%\n\nNeed any specific information about this airport?";
-      } else if (msg.includes("statistic") || msg.includes("stats")) {
-        response = "Today's Flight Statistics\n\n• **Total flights tracked**: 847\n• **On-time flights**: 712 (84.1%)\n• **Delayed flights**: 108 (12.7%)\n• **Cancelled flights**: 27 (3.2%)\n• **Busiest route**: SGN ↔ HAN (156 flights)\n• **Most delayed airline**: VietJet Air (18% delay rate)\n\nWould you like more detailed analytics?";
-      } else {
-        response = "I understand your question about: \"" + userMessage + "\"\n\nWhile I'm currently in demo mode, I can help you with:\n• Flight status lookups\n• Airport information\n• Delay predictions\n• Weather impacts\n• Route statistics\n\nTry asking about a specific flight number or airport!";
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: response,
-          time: "Just now",
-        },
-      ]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      time: "Just now",
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    const userContent = input.trim();
-    setInput("");
-    simulateResponse(userContent);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleQuickPrompt = (prompt: string) => {
-    setInput(prompt);
-  };
-
-  const clearChat = () => {
-    setMessages(initialMessages);
-  };
+  function sendMessage(value = input) {
+    const content = value.trim()
+    if (!content || typing) return
+    setMessages((current) => [...current, { id: `user-${Date.now()}`, role: 'user', content, time: 'Just now' }])
+    setInput('')
+    setTyping(true)
+    timerRef.current = window.setTimeout(() => {
+      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: 'assistant', content: createResponse(content), time: 'Just now' }])
+      setTyping(false)
+    }, 700)
+  }
 
   return (
-    <div className="udash-ai-page">
-      <div className="udash-ai-header">
-        <div className="udash-ai-header-left">
-          <div className="udash-ai-header-icon">
-            <Bot className="w-5 h-5" />
+    <div className="h-[calc(100vh-72px)] min-h-[680px] overflow-hidden bg-[#f4f7fb] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto grid h-full max-w-[1450px] gap-5 xl:grid-cols-[310px_1fr]">
+        <aside className="hidden flex-col rounded-[28px] bg-[#07111f] p-5 text-white shadow-xl xl:flex">
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600"><Sparkles className="h-5 w-5" /></span>
+            <div><div className="font-semibold">SkyTrack Copilot</div><div className="text-xs text-slate-500">Guided aviation assistant</div></div>
           </div>
-          <div>
-            <h1 className="udash-page-title">AI Assistant</h1>
-            <p className="udash-ai-header-sub">
-              <span className="udash-ai-header-dot" />
-              Online — Powered by SkyTrack AI
-            </p>
+          <div className="mt-8 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Suggested questions</div>
+          <div className="mt-3 space-y-2">
+            {QUICK_PROMPTS.map((prompt) => (
+              <button key={prompt.label} type="button" onClick={() => sendMessage(prompt.prompt)} className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] p-3 text-left text-sm text-slate-300 transition hover:border-blue-400/20 hover:bg-blue-500/10 hover:text-white">
+                <prompt.icon className="h-4 w-4 shrink-0 text-blue-400" /><span>{prompt.label}</span>
+              </button>
+            ))}
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button className="udash-ai-clear-btn" onClick={clearChat} title="Clear chat">
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <Sparkles className="w-5 h-5 text-amber-400" />
-        </div>
-      </div>
+          <div className="mt-auto rounded-2xl border border-amber-300/10 bg-amber-300/[0.06] p-4">
+            <div className="text-xs font-semibold text-amber-200">Demo assistant</div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Answers are informational. Confirm live status using backend-powered Flight Search.</p>
+          </div>
+        </aside>
 
-      <div className="udash-ai-chat">
-        <div className="udash-ai-messages">
-          {messages.map((msg) => (
-            <div key={msg.id} className={`udash-ai-message udash-ai-message--${msg.role}`}>
-              {msg.role === "assistant" && (
-                <div className="udash-ai-message-avatar">
-                  <Bot className="w-4 h-4" />
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Bot className="h-5 w-5" /><span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" /></span>
+              <div><h1 className="font-semibold text-slate-950">AI assistant</h1><p className="text-xs text-slate-500">Online · Responses in a few seconds</p></div>
+            </div>
+            <button type="button" onClick={() => { setMessages(INITIAL_MESSAGES); setTyping(false); if (timerRef.current) window.clearTimeout(timerRef.current) }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+              <RotateCcw className="h-3.5 w-3.5" /><span className="hidden sm:inline">New chat</span>
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(59,130,246,.06),transparent_35%)] px-4 py-6 sm:px-8">
+            <div className="mx-auto max-w-3xl space-y-5">
+              {messages.map((message) => (
+                <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {message.role === 'assistant' && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-white"><Bot className="h-4 w-4" /></span>}
+                  <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${message.role === 'user' ? 'rounded-br-md bg-blue-600 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-700'}`}>
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <div className={`mt-2 text-[10px] ${message.role === 'user' ? 'text-blue-200' : 'text-slate-400'}`}>{message.time}</div>
+                  </div>
                 </div>
+              ))}
+              {typing && (
+                <div className="flex gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-white"><Bot className="h-4 w-4" /></span><div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-4">{[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: `${dot * 120}ms` }} />)}</div></div>
               )}
-              <div className="udash-ai-message-bubble">
-                <div className="udash-ai-message-text">{msg.content}</div>
-                <span className="udash-ai-message-time">{msg.time}</span>
-              </div>
+              <div ref={endRef} />
             </div>
-          ))}
-          {isTyping && (
-            <div className="udash-ai-message udash-ai-message--assistant">
-              <div className="udash-ai-message-avatar">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div className="udash-ai-message-bubble">
-                <div className="udash-ai-typing">
-                  <span /><span /><span />
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Quick Prompts */}
-        {messages.length <= 1 && (
-          <div className="udash-ai-quick-prompts">
-            {quickPrompts.map((qp) => {
-              const Icon = qp.icon;
-              return (
-                <button
-                  key={qp.label}
-                  className={`udash-ai-quick-prompt udash-ai-quick-prompt--${qp.color}`}
-                  onClick={() => handleQuickPrompt(qp.prompt)}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{qp.label}</span>
-                </button>
-              );
-            })}
           </div>
-        )}
 
-        {/* Input */}
-        <div className="udash-ai-input-area">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about flights, airports, delays..."
-            className="udash-ai-input"
-          />
-          <button
-            className="udash-ai-send-btn"
-            onClick={handleSend}
-            disabled={!input.trim() || isTyping}
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
+          <footer className="border-t border-slate-100 bg-white p-4 sm:p-5">
+            <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-blue-400 focus-within:bg-white">
+              <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage() } }} rows={1} placeholder="Ask about a flight, airport or delay..." className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400" />
+              <button type="button" onClick={() => sendMessage()} disabled={!input.trim() || typing} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
+            </div>
+          </footer>
+        </section>
       </div>
     </div>
-  );
+  )
 }

@@ -1,16 +1,18 @@
-import Header from '../components/Header'
-import Footer from '../components/Footer'
+'use client'
 
-export default function MainLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+import { usePathname } from 'next/navigation'
+import Footer from '../components/Footer'
+import Header from '../components/Header'
+
+export default function MainLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const isLiveMap = pathname === '/live-map'
+
   return (
-    <div className="bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 flex min-h-screen w-screen flex-col bg-[#eef2f6] overflow-hidden font-sans">
+    <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-[#f4f7fb]">
       <Header />
-      {children}
-      <Footer />
+      <div className={isLiveMap ? 'flex-1 overflow-hidden' : 'flex-1'}>{children}</div>
+      {!isLiveMap && <Footer />}
     </div>
   )
 }

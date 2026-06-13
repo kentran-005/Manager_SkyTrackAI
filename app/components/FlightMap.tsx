@@ -28,6 +28,18 @@ export interface Flight {
   status: string;
 }
 
+export interface MapWeather {
+  city: string;
+  temperature: number | null;
+  feelsLike: number | null;
+  description: string;
+  humidity: number | null;
+  windSpeed: number | null;
+  visibility: number | null;
+  loading: boolean;
+  error: string;
+}
+
 type LeafletComponentProps = PropsWithChildren<Record<string, unknown>>;
 
 const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>;
@@ -88,6 +100,8 @@ export default function FlightMap({
   searchTerm,
   onSearchTermChange,
   onSearchSubmit,
+  weather,
+  onWeatherToggle,
 }: {
   flights: Flight[];
   selectedFlight: Flight | null;
@@ -95,6 +109,8 @@ export default function FlightMap({
   searchTerm?: string;
   onSearchTermChange?: (value: string) => void;
   onSearchSubmit?: () => void;
+  weather?: MapWeather;
+  onWeatherToggle?: (active: boolean) => void;
 }) {
   const [activeLayers, setActiveLayers] = useState({
     heatmap: false,
@@ -105,7 +121,9 @@ export default function FlightMap({
   });
 
   function toggleLayer(layer: keyof typeof activeLayers) {
-    setActiveLayers((current) => ({ ...current, [layer]: !current[layer] }));
+    const nextValue = !activeLayers[layer];
+    setActiveLayers((current) => ({ ...current, [layer]: nextValue }));
+    if (layer === 'weather') onWeatherToggle?.(nextValue);
   }
 
   return (
@@ -200,6 +218,35 @@ export default function FlightMap({
           );
         })}
       </LeafletMapContainer>
+
+      {activeLayers.weather && weather && (
+        <div className="absolute right-4 top-4 z-[1000] w-[min(280px,calc(100%-32px))] rounded-2xl border border-white/10 bg-[#0b101d]/92 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-300">Weather layer</div>
+              <div className="mt-1 font-semibold">{weather.city}</div>
+            </div>
+            <CloudSun className="h-6 w-6 text-amber-300" />
+          </div>
+          {weather.loading ? (
+            <div className="mt-5 h-20 animate-pulse rounded-xl bg-white/[0.06]" />
+          ) : weather.error ? (
+            <p className="mt-4 text-xs leading-5 text-amber-200">{weather.error}</p>
+          ) : (
+            <>
+              <div className="mt-4 flex items-end justify-between">
+                <div className="text-4xl font-semibold">{weather.temperature === null ? '--' : `${Math.round(weather.temperature)}°`}</div>
+                <div className="max-w-32 text-right text-xs capitalize leading-5 text-slate-400">{weather.description}</div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-center">
+                <div><div className="text-[9px] uppercase tracking-wider text-slate-600">Humidity</div><div className="mt-1 text-xs font-semibold">{weather.humidity === null ? '--' : `${weather.humidity}%`}</div></div>
+                <div><div className="text-[9px] uppercase tracking-wider text-slate-600">Wind</div><div className="mt-1 text-xs font-semibold">{weather.windSpeed === null ? '--' : `${weather.windSpeed.toFixed(1)} m/s`}</div></div>
+                <div><div className="text-[9px] uppercase tracking-wider text-slate-600">Visibility</div><div className="mt-1 text-xs font-semibold">{weather.visibility === null ? '--' : `${weather.visibility.toFixed(1)} km`}</div></div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bottom Toolbar */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl p-1.5 flex gap-1 shadow-2xl shadow-black/40">

@@ -1,191 +1,104 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Search, Plane, Building2, MapPin } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowUpRight, Building2, Map, MapPin, Search } from 'lucide-react'
 import api from '@/lib/axios'
-
-interface Airport {
-  code: string
-  name: string
-  city: string
-  iata: string
-  country: string
-  dailyFlights: number | string
-  onTimeRate: number | null
-  terminals: number | string
-}
-
-interface BackendAirport {
-  code?: string
-  name?: string
-  city?: string
-  country?: string
-}
-
-function getOnTimeColor(rate: number | null) {
-  if (rate === null) return 'text-slate-500 bg-slate-50'
-  if (rate >= 90) return 'text-emerald-600 bg-emerald-50'
-  if (rate >= 85) return 'text-amber-600 bg-amber-50'
-  return 'text-red-600 bg-red-50'
-}
-
-function getOnTimeBarColor(rate: number | null) {
-  if (rate === null) return 'bg-slate-300'
-  if (rate >= 90) return 'bg-emerald-500'
-  if (rate >= 85) return 'bg-amber-500'
-  return 'bg-red-500'
-}
-
-function mapBackendAirport(a: BackendAirport): Airport {
-  return {
-    code: a.code || 'N/A',
-    name: a.name || 'Unknown Airport',
-    city: a.city || 'N/A',
-    country: a.country || '',
-    iata: a.code || 'N/A',
-    dailyFlights: 'N/A',
-    onTimeRate: null,
-    terminals: 'N/A',
-  }
-}
+import { mapBackendAirport, type AirportCard, type BackendAirport } from '@/lib/skytrack-data'
 
 export default function AirportsPage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [query, setQuery] = useState('')
+  const [airports, setAirports] = useState<AirportCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let mounted = true
-
-    async function loadAirports() {
-      try {
-        setLoading(true)
-        const res = await api.get('/api/airports')
-        if (mounted) setAirports(Array.isArray(res.data) ? res.data.map(mapBackendAirport) : [])
-      } catch (err: unknown) {
-        if (mounted) setError(err instanceof Error ? err.message : 'Cannot load airports')
-      } finally {
+    api.get('/api/airports')
+      .then((response) => {
+        if (!mounted) return
+        setAirports(Array.isArray(response.data) ? response.data.map((airport: BackendAirport) => mapBackendAirport(airport)) : [])
+        setError('')
+      })
+      .catch(() => {
+        if (mounted) setError('Airport data is temporarily unavailable. Please try again shortly.')
+      })
+      .finally(() => {
         if (mounted) setLoading(false)
-      }
-    }
-
-    loadAirports()
-    return () => {
-      mounted = false
-    }
+      })
+    return () => { mounted = false }
   }, [])
 
-  const filteredAirports = airports.filter((airport) =>
-    searchQuery === '' ||
-    airport.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    airport.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    airport.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    airport.iata.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredAirports = useMemo(() => {
+    const value = query.trim().toLowerCase()
+    if (!value) return airports
+    return airports.filter((airport) => [airport.code, airport.iata, airport.name, airport.city, airport.country].some((field) => field.toLowerCase().includes(value)))
+  }, [airports, query])
+
+  const countries = new Set(airports.map((airport) => airport.country)).size
 
   return (
-    <main className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Page Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f172a]">Airports</h1>
-          <p className="text-sm text-[#64748b] mt-1">Vietnam airport network overview and statistics</p>
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8]" />
-          <input
-            type="text"
-            placeholder="Search airports..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-[#e2e8f0] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          />
-        </div>
-
-        {/* Airport Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredAirports.map((airport) => (
-            <div
-              key={airport.code}
-              className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
-            >
-              <div className="p-5">
-                {/* Airport Code & Name */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center group-hover:from-blue-100 group-hover:to-blue-200 transition-colors">
-                    <span className="text-lg font-bold text-[#0066ff]">{airport.code}</span>
-                  </div>
-                  <div className={`px-2 py-1 rounded-lg text-xs font-semibold ${getOnTimeColor(airport.onTimeRate)}`}>
-                    {airport.onTimeRate === null ? 'N/A' : `${airport.onTimeRate}%`}
-                  </div>
-                </div>
-
-                <h3 className="text-sm font-semibold text-[#0f172a] mb-0.5 line-clamp-1">{airport.name}</h3>
-                <div className="flex items-center gap-1 text-xs text-[#64748b] mb-4">
-                  <MapPin className="w-3 h-3" />
-                  {airport.city} · {airport.country || airport.iata}
-                </div>
-
-                {/* On-Time Rate Bar */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-[#64748b]">On-Time Rate</span>
-                    <span className="font-medium text-[#334155]">{airport.onTimeRate === null ? 'N/A' : `${airport.onTimeRate}%`}</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-[#f1f5f9] rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${getOnTimeBarColor(airport.onTimeRate)}`}
-                      style={{ width: `${airport.onTimeRate ?? 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#f1f5f9]">
-                  <div className="flex items-center gap-1.5">
-                    <Plane className="w-3.5 h-3.5 text-[#94a3b8]" />
-                    <div>
-                      <p className="text-[10px] text-[#94a3b8]">Daily Flights</p>
-                      <p className="text-xs font-semibold text-[#334155]">{airport.dailyFlights}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-[#94a3b8]" />
-                    <div>
-                      <p className="text-[10px] text-[#94a3b8]">Terminals</p>
-                      <p className="text-xs font-semibold text-[#334155]">{airport.terminals}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <main className="bg-[#f4f7fb]">
+      <section className="relative overflow-hidden bg-[#07111f] px-5 py-16 text-white sm:px-6 lg:px-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,rgba(37,99,235,.28),transparent_30%)]" />
+        <div className="relative mx-auto max-w-7xl">
+          <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Airport directory</div>
+          <div className="mt-4 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">Explore the airports shaping every journey.</h1>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Search Vietnam&apos;s airport network and quickly identify each location by IATA code, city and country.</p>
             </div>
-          ))}
+            <div className="grid grid-cols-2 gap-3 sm:min-w-[300px]">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><Building2 className="h-5 w-5 text-blue-300" /><div className="mt-4 text-2xl font-semibold">{airports.length || '—'}</div><div className="text-xs text-slate-500">Airports indexed</div></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><Map className="h-5 w-5 text-cyan-300" /><div className="mt-4 text-2xl font-semibold">{countries || '—'}</div><div className="text-xs text-slate-500">Countries covered</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-5 py-12 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Airport network</h2>
+            <p className="mt-1 text-sm text-slate-500">{filteredAirports.length} location{filteredAirports.length === 1 ? '' : 's'} shown</p>
+          </div>
+          <label className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 sm:w-[360px]">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search code, airport or city" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+          </label>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</div>}
 
-        {loading && (
-          <div className="text-center py-16">
-            <Building2 className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3 animate-pulse" />
-            <p className="text-[#64748b] font-medium">Loading airports...</p>
+        {loading ? (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="h-64 animate-pulse rounded-[28px] border border-slate-200 bg-white" />)}
+          </div>
+        ) : (
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredAirports.map((airport, index) => (
+              <article key={airport.id} className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl">
+                <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-blue-50 transition group-hover:scale-125" />
+                <div className="relative flex items-start justify-between">
+                  <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-950 font-mono text-lg font-bold text-white shadow-lg">{airport.code}</div>
+                  <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">#{String(index + 1).padStart(2, '0')} <ArrowUpRight className="h-3 w-3" /></span>
+                </div>
+                <h3 className="relative mt-8 text-lg font-semibold text-slate-950">{airport.name}</h3>
+                <div className="relative mt-2 flex items-center gap-2 text-sm text-slate-500"><MapPin className="h-4 w-4 text-blue-500" />{airport.city}, {airport.country}</div>
+                <div className="relative mt-6 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5">
+                  <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">IATA code</div><div className="mt-1 font-mono text-sm font-bold text-slate-800">{airport.iata}</div></div>
+                  <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Coordinates</div><div className="mt-1 text-sm font-semibold text-slate-800">{airport.latitude !== undefined ? `${airport.latitude.toFixed(2)}, ${airport.longitude?.toFixed(2)}` : 'Not available'}</div></div>
+                </div>
+              </article>
+            ))}
           </div>
         )}
 
         {!loading && filteredAirports.length === 0 && (
-          <div className="text-center py-16">
-            <Building2 className="w-12 h-12 text-[#cbd5e1] mx-auto mb-3" />
-            <p className="text-[#64748b] font-medium">No airports found</p>
-            <p className="text-sm text-[#94a3b8] mt-1">Try adjusting your search</p>
+          <div className="mt-8 grid min-h-80 place-items-center rounded-[28px] border border-dashed border-slate-300 bg-white text-center">
+            <div><Building2 className="mx-auto h-9 w-9 text-slate-300" /><h3 className="mt-4 font-semibold text-slate-800">No airport found</h3><p className="mt-1 text-sm text-slate-500">Try a different airport name, city or IATA code.</p></div>
           </div>
         )}
-      </div>
+      </section>
     </main>
   )
 }

@@ -26,11 +26,6 @@ export default function AirportsManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Gọi API lấy danh sách sân bay
-  useEffect(() => {
-    fetchAirports();
-  }, []);
-
   const fetchAirports = async () => {
     try {
       const { data } = await api.get("/api/airports");
@@ -41,6 +36,11 @@ export default function AirportsManagement() {
       setLoading(false);
     }
   };
+
+  // Gọi API lấy danh sách sân bay
+  useEffect(() => {
+    fetchAirports();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -62,7 +62,7 @@ export default function AirportsManagement() {
       setIsModalOpen(false); // Đóng modal sau khi lưu thành công
       fetchAirports();
       alert(editingId ? "Cập nhật thành công!" : "Thêm mới thành công!");
-    } catch (error) {
+    } catch {
       alert("Lỗi: Mã sân bay có thể đã tồn tại!");
     }
   };
@@ -79,7 +79,7 @@ export default function AirportsManagement() {
     try {
       await api.delete(`/api/airports/${id}`);
       fetchAirports();
-    } catch (error) {
+    } catch {
       alert("Lỗi khi xóa sân bay!");
     }
   };

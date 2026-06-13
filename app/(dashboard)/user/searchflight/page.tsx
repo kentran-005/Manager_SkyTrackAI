@@ -1,702 +1,244 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
-  Search,
-  Plane,
-  Clock,
-  XCircle,
-  CheckCircle,
-  TrendingUp,
-  ChevronDown,
-  Eye,
-  Bookmark,
-  Calendar,
+  AlertTriangle,
   ArrowRight,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Clock3,
+  Loader2,
   MapPinned,
-} from 'lucide-react';
+  Plane,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react'
+import api from '@/lib/axios'
+import { getAirlineColor, mapBackendFlight, type BackendFlight, type FlightCard } from '@/lib/skytrack-data'
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
-type FlightStatus = 'on-time' | 'delayed' | 'cancelled';
+const PAGE_SIZE = 8
+const POPULAR_SEARCHES = ['VN220', 'VJ123', 'QH210', 'HAN', 'SGN', 'DAD']
 
-interface Flight {
-  id: string;
-  code: string;
-  airlineName: string;
-  airlineColor: string;
-  airlineBadge: string;
-  fromCode: string;
-  fromCity: string;
-  toCode: string;
-  toCity: string;
-  departure: string;
-  arrival: string;
-  status: FlightStatus;
-  statusLabel: string;
-  statusDetail: string;
-  aircraft: string;
+function extractFlights(payload: unknown): FlightCard[] {
+  if (Array.isArray(payload)) return (payload as BackendFlight[]).map(mapBackendFlight)
+  if (!payload || typeof payload !== 'object') return []
+  const record = payload as Record<string, unknown>
+  const nested = record.content ?? record.data ?? record.results
+  return Array.isArray(nested) ? (nested as BackendFlight[]).map(mapBackendFlight) : []
 }
 
-// ─────────────────────────────────────────────
-// Static data
-// ─────────────────────────────────────────────
-const POPULAR_SEARCHES = ['VN220', 'VJ123', 'QH210', 'BL789', 'VN192', 'AK524'];
-
-const FLIGHTS: Flight[] = [
-  {
-    id: '1',
-    code: 'VN220',
-    airlineName: 'Vietnam Airlines',
-    airlineColor: '#b8860b',
-    airlineBadge: 'VN',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'HAN',
-    toCity: 'Hanoi',
-    departure: '10:30',
-    arrival: '12:45',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Boeing 787-9',
-  },
-  {
-    id: '2',
-    code: 'VJ123',
-    airlineName: 'VietJet Air',
-    airlineColor: '#e31837',
-    airlineBadge: 'VJ',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'DAD',
-    toCity: 'Da Nang',
-    departure: '11:15',
-    arrival: '12:30',
-    status: 'delayed',
-    statusLabel: 'Delayed',
-    statusDetail: 'Delayed 35m',
-    aircraft: 'Airbus A321',
-  },
-  {
-    id: '3',
-    code: 'QH210',
-    airlineName: 'Bamboo Airways',
-    airlineColor: '#007a3d',
-    airlineBadge: 'QH',
-    fromCode: 'HAN',
-    fromCity: 'Hanoi',
-    toCode: 'CXR',
-    toCity: 'Nha Trang',
-    departure: '14:00',
-    arrival: '15:45',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Airbus A320',
-  },
-  {
-    id: '4',
-    code: 'BL789',
-    airlineName: 'Pacific Airlines',
-    airlineColor: '#0055a5',
-    airlineBadge: 'BL',
-    fromCode: 'DAD',
-    fromCity: 'Da Nang',
-    toCode: 'SGN',
-    toCity: 'Ho Chi Minh City',
-    departure: '15:20',
-    arrival: '16:35',
-    status: 'cancelled',
-    statusLabel: 'Cancelled',
-    statusDetail: 'Cancelled',
-    aircraft: 'Airbus A321',
-  },
-  {
-    id: '5',
-    code: 'VN182',
-    airlineName: 'Vietnam Airlines',
-    airlineColor: '#b8860b',
-    airlineBadge: 'VN',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'PQC',
-    toCity: 'Phu Quoc',
-    departure: '16:45',
-    arrival: '17:45',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Airbus A321',
-  },
-  {
-    id: '6',
-    code: 'VN192',
-    airlineName: 'Vietnam Airlines',
-    airlineColor: '#b8860b',
-    airlineBadge: 'VN',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'VII',
-    toCity: 'Vinh',
-    departure: '17:30',
-    arrival: '19:10',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Airbus A321',
-  },
-  {
-    id: '7',
-    code: 'AK524',
-    airlineName: 'AirAsia',
-    airlineColor: '#e31837',
-    airlineBadge: 'AK',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'KUL',
-    toCity: 'Kuala Lumpur',
-    departure: '18:05',
-    arrival: '21:20',
-    status: 'delayed',
-    statusLabel: 'Delayed',
-    statusDetail: 'Delayed 20m',
-    aircraft: 'Airbus A320neo',
-  },
-  {
-    id: '8',
-    code: 'QH315',
-    airlineName: 'Bamboo Airways',
-    airlineColor: '#007a3d',
-    airlineBadge: 'QH',
-    fromCode: 'HAN',
-    fromCity: 'Hanoi',
-    toCode: 'SGN',
-    toCity: 'Ho Chi Minh City',
-    departure: '18:30',
-    arrival: '20:45',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Boeing 787-9',
-  },
-  {
-    id: '9',
-    code: 'VJ456',
-    airlineName: 'VietJet Air',
-    airlineColor: '#e31837',
-    airlineBadge: 'VJ',
-    fromCode: 'DAD',
-    fromCity: 'Da Nang',
-    toCode: 'HAN',
-    toCity: 'Hanoi',
-    departure: '19:15',
-    arrival: '20:45',
-    status: 'on-time',
-    statusLabel: 'On Time',
-    statusDetail: 'On schedule',
-    aircraft: 'Airbus A321',
-  },
-  {
-    id: '10',
-    code: 'BL102',
-    airlineName: 'Pacific Airlines',
-    airlineColor: '#0055a5',
-    airlineBadge: 'BL',
-    fromCode: 'SGN',
-    fromCity: 'Ho Chi Minh City',
-    toCode: 'CAN',
-    toCity: 'Guangzhou',
-    departure: '20:00',
-    arrival: '23:30',
-    status: 'cancelled',
-    statusLabel: 'Cancelled',
-    statusDetail: 'Cancelled',
-    aircraft: 'Airbus A321',
-  },
-];
-
-// ─────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────
-
-/** Mini sparkline bar chart for the summary cards */
-function MiniBarChart({ color, bars }: { color: string; bars: number[] }) {
-  const max = Math.max(...bars);
-  return (
-    <div className="flex items-end gap-0.5 h-8">
-      {bars.map((val, i) => (
-        <div
-          key={i}
-          className="w-1.5 rounded-sm transition-all"
-          style={{
-            height: `${(val / max) * 100}%`,
-            backgroundColor: color,
-            opacity: i === bars.length - 1 ? 1 : 0.4 + (i / bars.length) * 0.5,
-          }}
-        />
-      ))}
-    </div>
-  );
+function statusClass(status: FlightCard['status']) {
+  if (status === 'On Time' || status === 'Boarding') return 'bg-emerald-50 text-emerald-700 ring-emerald-600/10'
+  if (status === 'Delayed') return 'bg-amber-50 text-amber-700 ring-amber-600/10'
+  if (status === 'Cancelled') return 'bg-rose-50 text-rose-700 ring-rose-600/10'
+  return 'bg-blue-50 text-blue-700 ring-blue-600/10'
 }
 
-/** Progress bar for On Time card */
-function ProgressBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-      <div
-        className="h-1.5 rounded-full transition-all"
-        style={{ width: `${value}%`, backgroundColor: color }}
-      />
-    </div>
-  );
-}
-
-/** Status badge */
-function StatusBadge({ status, label, detail }: { status: FlightStatus; label: string; detail: string }) {
-  const styles: Record<FlightStatus, { dot: string; badge: string; detail: string }> = {
-    'on-time': {
-      dot: 'bg-emerald-500',
-      badge: 'text-emerald-600 bg-emerald-50',
-      detail: 'text-emerald-600',
-    },
-    delayed: {
-      dot: 'bg-amber-500',
-      badge: 'text-amber-600 bg-amber-50',
-      detail: 'text-amber-600',
-    },
-    cancelled: {
-      dot: 'bg-red-500',
-      badge: 'text-red-600 bg-red-50',
-      detail: 'text-red-600',
-    },
-  };
-
-  const s = styles[status];
-
-  return (
-    <div className="flex flex-col gap-1">
-      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full w-fit ${s.badge}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-        {label}
-      </span>
-      <span className={`text-xs ${s.detail}`}>{detail}</span>
-    </div>
-  );
-}
-
-/** Airline logo badge */
-function AirlineBadge({ badge, color }: { badge: string; color: string }) {
-  return (
-    <div
-      className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-      style={{ backgroundColor: color }}
-    >
-      {badge}
-    </div>
-  );
-}
-
-/** Select dropdown (uncontrolled styling wrapper) */
-function SelectDropdown({ options, value, onChange }: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-white border border-gray-200 rounded-xl px-4 py-2.5 pr-9 text-sm text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-w-[130px]"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
-      </select>
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────
 export default function SearchFlightPage() {
-  const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAirline, setSelectedAirline] = useState('All Airlines');
-  const [selectedAirport, setSelectedAirport] = useState('All Airports');
-  const [selectedStatus, setSelectedStatus] = useState('All Status');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState('Departure Time');
+  const router = useRouter()
+  const requestId = useRef(0)
+  const [input, setInput] = useState('')
+  const [activeQuery, setActiveQuery] = useState('')
+  const [flights, setFlights] = useState<FlightCard[]>([])
+  const [airline, setAirline] = useState('All airlines')
+  const [airport, setAirport] = useState('All airports')
+  const [status, setStatus] = useState('All statuses')
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const totalPages = 154;
+  async function requestFlights(query = '') {
+    const currentRequest = ++requestId.current
+    setLoading(true)
+    setError('')
+    try {
+      const endpoint = query.trim()
+        ? `/api/flights/search?q=${encodeURIComponent(query.trim())}`
+        : '/api/flights'
+      const response = await api.get(endpoint)
+      if (currentRequest !== requestId.current) return
+      setFlights(extractFlights(response.data))
+      setActiveQuery(query.trim())
+      setPage(1)
+    } catch (requestError: unknown) {
+      if (currentRequest !== requestId.current) return
+      setFlights([])
+      setError(requestError instanceof Error ? requestError.message : 'Unable to load flight data.')
+    } finally {
+      if (currentRequest === requestId.current) setLoading(false)
+    }
+  }
 
-  const handlePopularSearch = (tag: string) => {
-    setSearchQuery(tag);
-  };
+  useEffect(() => {
+    void requestFlights()
+    return () => { requestId.current += 1 }
+  }, [])
 
-  const openLiveMap = (flightCode: string) => {
-    const code = flightCode.trim();
-    if (!code) return;
-    router.push(`/user/live-map?flight=${encodeURIComponent(code)}`);
-  };
+  const airlineOptions = useMemo(() => ['All airlines', ...Array.from(new Set(flights.map((flight) => flight.airline).filter(Boolean))).sort()], [flights])
+  const airportOptions = useMemo(() => ['All airports', ...Array.from(new Set(flights.flatMap((flight) => [flight.from.code, flight.to.code]).filter((code) => code !== 'N/A'))).sort()], [flights])
+  const statusOptions = ['All statuses', 'On Time', 'Scheduled', 'Boarding', 'Delayed', 'Cancelled']
+
+  const filteredFlights = useMemo(() => flights.filter((flight) => {
+    const matchesAirline = airline === 'All airlines' || flight.airline === airline
+    const matchesAirport = airport === 'All airports' || flight.from.code === airport || flight.to.code === airport
+    const matchesStatus = status === 'All statuses' || flight.status === status
+    return matchesAirline && matchesAirport && matchesStatus
+  }), [airline, airport, flights, status])
+
+  useEffect(() => { setPage(1) }, [airline, airport, status])
+
+  const totalPages = Math.max(1, Math.ceil(filteredFlights.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const visibleFlights = filteredFlights.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const onTime = flights.filter((flight) => flight.status === 'On Time' || flight.status === 'Boarding').length
+  const delayed = flights.filter((flight) => flight.status === 'Delayed').length
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault()
+    void requestFlights(input)
+  }
+
+  function reset() {
+    setInput('')
+    setAirline('All airlines')
+    setAirport('All airports')
+    setStatus('All statuses')
+    void requestFlights()
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
-
-      {/* ── Page Header ──────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Flights</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Search and track real-time flight information</p>
-      </div>
-
-      {/* ── Search Panel ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-        {/* Search bar + filters */}
-        <div className="flex flex-wrap gap-3 items-center">
-          {/* Text search */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by flight code, airport or airline..."
-              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 placeholder-gray-400 transition-all"
-            />
-          </div>
-
-          {/* Dropdowns */}
-          <SelectDropdown
-            options={['All Airlines', 'Vietnam Airlines', 'VietJet Air', 'Bamboo Airways', 'Pacific Airlines', 'AirAsia']}
-            value={selectedAirline}
-            onChange={setSelectedAirline}
-          />
-          <SelectDropdown
-            options={['All Airports', 'SGN – Ho Chi Minh City', 'HAN – Hanoi', 'DAD – Da Nang', 'PQC – Phu Quoc', 'CXR – Nha Trang']}
-            value={selectedAirport}
-            onChange={setSelectedAirport}
-          />
-          <SelectDropdown
-            options={['All Status', 'On Time', 'Delayed', 'Cancelled']}
-            value={selectedStatus}
-            onChange={setSelectedStatus}
-          />
-
-          {/* Search button */}
-          <button
-            type="button"
-            onClick={() => openLiveMap(searchQuery)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm shadow-blue-200 ml-auto"
-          >
-            <Search className="w-4 h-4" />
-            Search
-          </button>
-        </div>
-
-        {/* Popular searches */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-gray-500">Popular Searches:</span>
-          {POPULAR_SEARCHES.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => handlePopularSearch(tag)}
-              className="text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-lg transition-colors"
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Summary Cards ────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-
-        {/* Total Flights */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Flights</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">1,540</p>
-              <div className="flex items-center gap-1 mt-1.5">
-                <span className="text-[11px] text-gray-400">Today</span>
-                <span className="flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600">
-                  <TrendingUp className="w-3 h-3" />
-                  12.5%
-                </span>
-                <span className="text-[11px] text-gray-400">vs yesterday</span>
-              </div>
+    <main className="min-h-full bg-[#f4f7fb] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1500px]">
+        <section className="relative overflow-hidden rounded-[30px] bg-[#07111f] p-6 text-white shadow-xl shadow-slate-950/10 sm:p-8">
+          <div className="absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_center,rgba(37,99,235,.35),transparent_60%)]" />
+          <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-2xl">
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Flight intelligence</div>
+              <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Find the flight that matters, fast.</h1>
+              <p className="mt-3 text-sm leading-6 text-slate-400">Search live backend records by flight number, airline, route or airport, then narrow the result with operational filters.</p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <Plane className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <MiniBarChart color="#3b82f6" bars={[60, 75, 55, 80, 70, 90, 85, 95, 88, 100]} />
-          </div>
-        </div>
-
-        {/* On Time */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">On Time</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">1,235</p>
-              <p className="text-[11px] text-gray-400 mt-1.5">80.2% of total flights</p>
-              <ProgressBar value={80.2} color="#10b981" />
-            </div>
-            <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-5 h-5 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        {/* Delayed */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Delayed</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">228</p>
-              <p className="text-[11px] text-gray-400 mt-1.5">14.8% of total flights</p>
-            </div>
-            <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-              <Clock className="w-5 h-5 text-amber-600" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <MiniBarChart color="#f59e0b" bars={[30, 45, 25, 55, 40, 60, 35, 50, 42, 48]} />
-          </div>
-        </div>
-
-        {/* Cancelled */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cancelled</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">77</p>
-              <p className="text-[11px] text-gray-400 mt-1.5">5.0% of total flights</p>
-            </div>
-            <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-              <XCircle className="w-5 h-5 text-red-500" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <MiniBarChart color="#ef4444" bars={[10, 18, 8, 22, 15, 25, 12, 20, 17, 16]} />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Flights Table ─────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-
-        {/* Table Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
-          <div>
-            <h2 className="text-base font-bold text-gray-900">All Flights</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Showing 10 of 1,540 flights</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Sort by */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Sort by:</span>
-              <div className="relative">
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                >
-                  <option>Departure Time</option>
-                  <option>Arrival Time</option>
-                  <option>Flight Code</option>
-                  <option>Status</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Date picker display */}
-            <button className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <span>01 Jun 2026</span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+            <button type="button" onClick={() => router.push('/user/live-map')} className="relative inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold shadow-lg shadow-blue-600/20 transition hover:bg-blue-500">
+              <MapPinned className="h-4 w-4" /> Open live map
             </button>
           </div>
-        </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50/70">
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Flight</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">Route</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">Schedule</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">Status</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-4 py-3">Airline</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {FLIGHTS.map((flight) => (
-                <tr key={flight.id} className="hover:bg-blue-50/30 transition-colors group">
-
-                  {/* Flight code + airline */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <AirlineBadge badge={flight.airlineBadge} color={flight.airlineColor} />
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{flight.code}</p>
-                        <p className="text-xs text-gray-400">{flight.airlineName}</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Route */}
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900">{flight.fromCode}</p>
-                        <p className="text-xs text-gray-400">{flight.fromCity}</p>
-                      </div>
-                      <div className="flex items-center px-1">
-                        <Plane className="w-4 h-4 text-blue-400 rotate-0" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{flight.toCode}</p>
-                        <p className="text-xs text-gray-400">{flight.toCity}</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Schedule */}
-                  <td className="px-4 py-4">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900">{flight.departure}</span>
-                        <span className="text-[10px] text-gray-400 font-medium">Departure</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-gray-600">{flight.arrival}</span>
-                        <span className="text-[10px] text-gray-400 font-medium">Arrival</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-4 py-4">
-                    <StatusBadge
-                      status={flight.status}
-                      label={flight.statusLabel}
-                      detail={flight.statusDetail}
-                    />
-                  </td>
-
-                  {/* Airline + Aircraft */}
-                  <td className="px-4 py-4">
-                    <p className="text-sm font-semibold text-gray-800">{flight.airlineName}</p>
-                    <p className="text-xs text-gray-400">{flight.aircraft}</p>
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <button className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
-                        <Eye className="w-3.5 h-3.5" />
-                        View Details
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openLiveMap(flight.code)}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        <MapPinned className="w-3.5 h-3.5" />
-                        Live Map
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                      <button className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Bookmark className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-t border-gray-100 bg-gray-50/40">
-          <span className="text-sm text-gray-500">
-            Showing <span className="font-semibold text-gray-700">1</span> to{' '}
-            <span className="font-semibold text-gray-700">10</span> of{' '}
-            <span className="font-semibold text-gray-700">1,540</span> flights
-          </span>
-
-          <div className="flex items-center gap-1.5">
-            {/* Prev */}
-            <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-white hover:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronLeft className="w-4 h-4" />
+          <form onSubmit={submit} className="relative mt-7 flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.07] p-2 sm:flex-row">
+            <label className="flex min-w-0 flex-1 items-center gap-3 px-3">
+              <Search className="h-5 w-5 shrink-0 text-blue-300" />
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Search VN220, Vietnam Airlines, SGN or Hanoi..."
+                className="h-12 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+              />
+            </label>
+            <button type="submit" disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-blue-50 disabled:opacity-60">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Search backend
             </button>
-
-            {/* Pages */}
-            {[1, 2, 3].map((p) => (
-              <button
-                key={p}
-                onClick={() => setCurrentPage(p)}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold transition-all ${
-                  currentPage === p
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-200 border border-blue-600'
-                    : 'border border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
-                }`}
-              >
-                {p}
-              </button>
+          </form>
+          <div className="relative mt-3 flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-[11px] uppercase tracking-wider text-slate-600">Popular</span>
+            {POPULAR_SEARCHES.map((value) => (
+              <button key={value} type="button" onClick={() => { setInput(value); void requestFlights(value) }} className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-blue-400/40 hover:bg-blue-400/10 hover:text-white">{value}</button>
             ))}
-
-            <span className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
-
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold border transition-all ${
-                currentPage === totalPages
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'border-gray-200 text-gray-600 hover:bg-white hover:border-blue-300'
-              }`}
-            >
-              {totalPages}
-            </button>
-
-            {/* Next */}
-            <button
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-white hover:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
+        </section>
 
-          {/* Per page */}
-          <div className="relative">
-            <select className="appearance-none bg-white border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
-              <option>10 / page</option>
-              <option>20 / page</option>
-              <option>50 / page</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <section className="mt-5 grid gap-4 sm:grid-cols-3">
+          {[
+            { label: activeQuery ? 'Search results' : 'Available flights', value: flights.length, icon: Plane, color: 'text-blue-600 bg-blue-50' },
+            { label: 'On time / boarding', value: onTime, icon: Clock3, color: 'text-emerald-600 bg-emerald-50' },
+            { label: 'Delayed flights', value: delayed, icon: AlertTriangle, color: 'text-amber-600 bg-amber-50' },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <span className={`grid h-11 w-11 place-items-center rounded-xl ${item.color}`}><item.icon className="h-5 w-5" /></span>
+              <div><div className="text-2xl font-bold text-slate-950">{loading ? '—' : item.value}</div><div className="text-xs text-slate-500">{item.label}</div></div>
+            </div>
+          ))}
+        </section>
+
+        <section className="mt-5 rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><SlidersHorizontal className="h-4 w-4 text-blue-600" /> Refine results</div>
+            <div className="grid gap-2 sm:grid-cols-3 xl:flex">
+              {[
+                { value: airline, setter: setAirline, options: airlineOptions, label: 'Airline' },
+                { value: airport, setter: setAirport, options: airportOptions, label: 'Airport' },
+                { value: status, setter: setStatus, options: statusOptions, label: 'Status' },
+              ].map((filter) => (
+                <label key={filter.label} className="relative">
+                  <span className="sr-only">{filter.label}</span>
+                  <select value={filter.value} onChange={(event) => filter.setter(event.target.value)} className="h-11 min-w-[170px] appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 pr-9 text-sm text-slate-700 outline-none transition focus:border-blue-400">
+                    {filter.options.map((option) => <option key={option}>{option}</option>)}
+                  </select>
+                </label>
+              ))}
+              <button type="button" onClick={reset} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50"><RotateCcw className="h-4 w-4" /> Reset</button>
+            </div>
           </div>
+        </section>
+
+        {error && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div><div className="font-semibold">Could not load flights</div><div className="mt-1 text-rose-700">{error}</div><button type="button" onClick={() => void requestFlights(activeQuery)} className="mt-2 font-semibold underline">Try again</button></div>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between">
+          <div><h2 className="font-semibold text-slate-950">{activeQuery ? `Results for “${activeQuery}”` : 'All flights'}</h2><p className="mt-1 text-xs text-slate-500">{filteredFlights.length} matching record{filteredFlights.length === 1 ? '' : 's'}</p></div>
+          {activeQuery && <button type="button" onClick={reset} className="text-sm font-semibold text-blue-600 hover:text-blue-500">Clear search</button>}
         </div>
+
+        {loading ? (
+          <div className="mt-4 space-y-3">{[0, 1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}</div>
+        ) : visibleFlights.length > 0 ? (
+          <div className="mt-4 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+            <div className="hidden grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_.5fr] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 lg:grid">
+              <span>Flight</span><span>Route</span><span>Schedule</span><span>Status</span><span />
+            </div>
+            <div className="divide-y divide-slate-100">
+              {visibleFlights.map((flight) => (
+                <article key={flight.id} className="grid gap-4 p-5 transition hover:bg-blue-50/30 lg:grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_.5fr] lg:items-center">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xs font-bold text-white" style={{ backgroundColor: getAirlineColor(flight.airlineCode) }}>{flight.airlineCode || 'ST'}</span>
+                    <div className="min-w-0"><div className="font-mono font-bold text-slate-950">{flight.flightNo}</div><div className="truncate text-xs text-slate-500">{flight.airline}</div><div className="mt-0.5 text-[10px] text-slate-400">{flight.aircraft}</div></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div><div className="text-lg font-bold text-slate-950">{flight.from.code}</div><div className="text-xs text-slate-500">{flight.from.city}</div></div>
+                    <div className="flex flex-1 items-center gap-2 text-slate-300"><span className="h-px flex-1 bg-slate-200" /><Plane className="h-4 w-4 rotate-90 text-blue-500" /><span className="h-px flex-1 bg-slate-200" /></div>
+                    <div className="text-right"><div className="text-lg font-bold text-slate-950">{flight.to.code}</div><div className="text-xs text-slate-500">{flight.to.city}</div></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-400"><CalendarDays className="h-3 w-3" /> Departure</div><div className="mt-1 text-sm font-semibold">{flight.from.time}</div><div className="text-[10px] text-slate-400">{flight.from.date}</div></div>
+                    <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Arrival</div><div className="mt-1 text-sm font-semibold">{flight.to.time}</div><div className="text-[10px] text-slate-400">{flight.duration}</div></div>
+                  </div>
+                  <div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusClass(flight.status)}`}>{flight.status}</span></div>
+                  <button type="button" onClick={() => router.push('/user/live-map')} className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-500">Map <ArrowRight className="h-3.5 w-3.5" /></button>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : !error && (
+          <div className="mt-4 grid min-h-72 place-items-center rounded-[26px] border border-dashed border-slate-300 bg-white text-center">
+            <div><Search className="mx-auto h-9 w-9 text-slate-300" /><h3 className="mt-4 font-semibold text-slate-800">No flights found</h3><p className="mt-1 max-w-sm text-sm text-slate-500">Try another flight number, airport code or clear the filters.</p></div>
+          </div>
+        )}
+
+        {!loading && filteredFlights.length > PAGE_SIZE && (
+          <div className="mt-5 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <span className="text-xs text-slate-500">Page {safePage} of {totalPages}</span>
+            <div className="flex gap-2">
+              <button type="button" disabled={safePage === 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
+              <button type="button" disabled={safePage === totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    </main>
+  )
 }

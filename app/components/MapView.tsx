@@ -1,86 +1,67 @@
 'use client'
 
-import { type ComponentType, type PropsWithChildren, useEffect, useState } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  ZoomControl,
-  useMap,
-} from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import api from '@/lib/axios';
-import { Search, Plane, BarChart3, Navigation2 } from 'lucide-react';
+import { type ComponentType, type PropsWithChildren, useEffect, useMemo, useState } from 'react'
+import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import api from '@/lib/axios'
+import { mapRealtimeFlight, type RealtimeFlight } from '@/lib/skytrack-data'
 
-// ================= INTERFACES =================
-interface Airport {
-  code: string;
-  name: string;
-  lat: number;
-  lng: number;
+export interface FlightMarkerData {
+  id: string
+  callsign: string
+  icao24: string
+  originCountry: string
+  lat: number
+  lng: number
+  rotation: number
+  altitude: number | null
+  velocity: number | null
+  onGround: boolean
 }
 
-interface FlightMarkerData {
-  id: string;
-  callsign: string;
-  icao24: string;
-  originCountry: string;
-  lat: number;
-  lng: number;
-  rotation: number;
-  altitude: number | null;
-  velocity: number | null;
-  onGround: boolean;
-}
+type FlightFilter = 'all' | 'airborne' | 'ground'
+type LeafletComponentProps = PropsWithChildren<Record<string, unknown>>
 
-interface RealtimeFlight {
-  icao24?: string;
-  callsign?: string;
-  originCountry?: string;
-  longitude?: number;
-  latitude?: number;
-  altitude?: number;
-  velocity?: number;
-  heading?: number;
-  onGround?: boolean;
-}
-
-type LeafletComponentProps = PropsWithChildren<Record<string, unknown>>;
 interface InteractiveMap {
-  flyTo(center: [number, number], zoom?: number, options?: { duration?: number }): void;
-  getContainer(): HTMLElement;
-  invalidateSize(): void;
-  zoomIn(): void;
-  zoomOut(): void;
+  flyTo(center: [number, number], zoom?: number, options?: { duration?: number }): void
+  getContainer(): HTMLElement
+  invalidateSize(): void
+  zoomIn(): void
+  zoomOut(): void
 }
 
-const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>;
-const LeafletTileLayer = TileLayer as unknown as ComponentType<Record<string, unknown>>;
-const LeafletMarker = Marker as unknown as ComponentType<LeafletComponentProps>;
-const LeafletZoomControl = ZoomControl as unknown as ComponentType<Record<string, unknown>>;
+interface MapViewProps {
+  selectedFlight: FlightMarkerData | null
+  onSelectFlight: (flight: FlightMarkerData) => void
+  onFlightsChange?: (flights: FlightMarkerData[]) => void
+  searchTerm?: string
+  filter?: FlightFilter
+  showAirports?: boolean
+}
 
-// ================= ICONS =================
-function createPlaneIcon(altitude: number | null, onGround: boolean, rotation: number) {
-  // Logic phân màu theo độ cao
-  let color = '#3b82f6'; // Xanh dương: Bay cao (>9000m)
-  let size = 24;
-  let glow = 'drop-shadow(0 0 4px #3b82f680)';
+const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>
+const LeafletTileLayer = TileLayer as unknown as ComponentType<Record<string, unknown>>
+const LeafletMarker = Marker as unknown as ComponentType<LeafletComponentProps>
 
-  if (onGround) {
-    color = '#64748b'; // Xám: Đỗ trên mặt đất
-    size = 18;
-    glow = '';
-  } else if (altitude !== null && altitude < 2500) {
-    color = '#06b6d4'; // Cyan: Đang cất cánh/hạ cánh độ cao thấp
-    size = 22;
-    glow = 'drop-shadow(0 0 6px #06b6d480)';
-  }
+const AIRPORTS = [
+  { code: 'HAN', lat: 21.2213, lng: 105.808 },
+  { code: 'DAD', lat: 16.0439, lng: 108.212 },
+  { code: 'SGN', lat: 10.8188, lng: 106.651 },
+  { code: 'CXR', lat: 12.2213, lng: 109.191 },
+  { code: 'PQC', lat: 10.1667, lng: 103.983 },
+  { code: 'HPH', lat: 20.8421, lng: 106.726 },
+]
+
+function createPlaneIcon(flight: FlightMarkerData, selected: boolean) {
+  const color = selected ? '#facc15' : flight.onGround ? '#94a3b8' : flight.altitude !== null && flight.altitude < 2500 ? '#22d3ee' : '#60a5fa'
+  const size = selected ? 31 : flight.onGround ? 18 : 24
 
   return L.divIcon({
     className: 'custom-flight-marker',
-    html: `<div style="transform: rotate(${rotation}deg); width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; filter: ${glow}; transition: all 0.3s ease;">
-      <svg width="100%" height="100%" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="0.6" xmlns="http://www.w3.org/2000/svg">
+    html: `<div style="position:relative;width:${size}px;height:${size}px;display:grid;place-items:center;transform:rotate(${flight.rotation}deg);filter:drop-shadow(0 0 ${selected ? 9 : 5}px ${color});transition:all .2s ease">
+      ${selected ? '<span style="position:absolute;inset:-7px;border:1px solid rgba(250,204,21,.65);border-radius:50%"></span>' : ''}
+      <svg width="100%" height="100%" viewBox="0 0 24 24" fill="${color}" stroke="#07111f" stroke-width="0.8">
         <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
       </svg>
     </div>`,
@@ -92,200 +73,147 @@ function createPlaneIcon(altitude: number | null, onGround: boolean, rotation: n
 function createAirportIcon(code: string) {
   return L.divIcon({
     className: 'custom-airport-marker',
-    html: `<div style="background: rgba(15, 23, 42, 0.8); color: #94a3b8; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; border: 1px solid #334155; white-space: nowrap; text-align: center; letter-spacing: 0.5px;">${code}</div>`,
-    iconSize: [36, 18],
-    iconAnchor: [18, 9],
+    html: `<div style="display:flex;align-items:center;gap:4px;color:#94a3b8;font:700 10px ui-monospace,monospace;letter-spacing:.08em;text-shadow:0 1px 3px #000">
+      <span style="width:6px;height:6px;border:1px solid #38bdf8;border-radius:50%;box-shadow:0 0 8px #38bdf8"></span>${code}
+    </div>`,
+    iconSize: [45, 16],
+    iconAnchor: [8, 8],
   })
 }
 
-// ================= MAP HELPERS =================
-function MapResizeHandler() {
+function MapLifecycle({ selectedFlight }: { selectedFlight: FlightMarkerData | null }) {
   const map = useMap() as unknown as InteractiveMap
-  useEffect(() => { const timer = setTimeout(() => map.invalidateSize(), 200); return () => clearTimeout(timer) }, [map])
-  return null
-}
 
-function MapControlBridge() {
-  const map = useMap() as unknown as InteractiveMap
+  useEffect(() => {
+    const timer = window.setTimeout(() => map.invalidateSize(), 150)
+    return () => window.clearTimeout(timer)
+  }, [map])
+
+  useEffect(() => {
+    if (selectedFlight) map.flyTo([selectedFlight.lat, selectedFlight.lng], 8, { duration: 0.8 })
+  }, [map, selectedFlight])
+
   useEffect(() => {
     type MapControlAction = 'zoom-in' | 'zoom-out' | 'focus-vietnam' | 'fullscreen'
     function handleControl(event: Event) {
       const action = (event as CustomEvent<MapControlAction>).detail
       if (action === 'zoom-in') map.zoomIn()
-      else if (action === 'zoom-out') map.zoomOut()
-      else if (action === 'focus-vietnam') map.flyTo([14.0, 108.0], 6, { duration: 0.9 })
-      else if (action === 'fullscreen') {
+      if (action === 'zoom-out') map.zoomOut()
+      if (action === 'focus-vietnam') map.flyTo([14, 108], 6, { duration: 0.8 })
+      if (action === 'fullscreen') {
         const container = map.getContainer().parentElement
         if (!container) return
-        if (document.fullscreenElement) document.exitFullscreen().finally(() => map.invalidateSize())
-        else container.requestFullscreen().finally(() => map.invalidateSize())
+        const actionPromise = document.fullscreenElement ? document.exitFullscreen() : container.requestFullscreen()
+        actionPromise.finally(() => map.invalidateSize())
       }
     }
     window.addEventListener('skytrack-map-control', handleControl)
     return () => window.removeEventListener('skytrack-map-control', handleControl)
   }, [map])
+
   return null
 }
 
-function FlyToSelected({ flight }: { flight: FlightMarkerData | null }) {
-  const map = useMap() as unknown as InteractiveMap;
-  useEffect(() => {
-    if (!flight) return;
-    map.flyTo([flight.lat, flight.lng], 9, { duration: 1.2 });
-  }, [flight, map]);
-  return null;
-}
-
-// ================= DATA MAPPERS =================
-function mapRealtimeFlight(f: RealtimeFlight): FlightMarkerData | null {
-  if (typeof f.latitude !== 'number' || typeof f.longitude !== 'number') return null
-
-  const callsign = f.callsign?.trim() || 'Unknown'
-  const icao24 = f.icao24?.trim() || 'N/A'
-  const altitude = typeof f.altitude === 'number' ? f.altitude : null
-  const velocity = typeof f.velocity === 'number' ? f.velocity : null
-  const onGround = Boolean(f.onGround)
-
-  // FIX LỖI DUPLICATE KEY: Tạo ID duy nhất bằng cách nối chuỗi an toàn
-  // Nếu icao24 có -> dùng nó (vì nó là định danh vật lý của máy bay).
-  // Nếu không có -> ghép callsign + tọa độ để không bao giờ bị trùng.
-  const uniqueId = icao24 !== 'N/A' 
-    ? icao24 
-    : `${callsign}_${f.latitude.toFixed(3)}_${f.longitude.toFixed(3)}`;
-
+function toMarker(flight: RealtimeFlight): FlightMarkerData | null {
+  const mapped = mapRealtimeFlight(flight)
+  if (!mapped) return null
   return {
-    id: uniqueId,
-    callsign,
-    icao24,
-    originCountry: f.originCountry || 'Unknown',
-    lat: f.latitude,
-    lng: f.longitude,
-    rotation: typeof f.heading === 'number' ? f.heading : 0,
-    altitude,
-    velocity,
-    onGround,
+    id: mapped.id,
+    callsign: mapped.flightNumber,
+    icao24: flight.icao24?.trim() || 'N/A',
+    originCountry: flight.originCountry?.trim() || 'Unknown',
+    lat: mapped.latitude,
+    lng: mapped.longitude,
+    rotation: mapped.heading,
+    altitude: typeof flight.altitude === 'number' ? flight.altitude : null,
+    velocity: typeof flight.velocity === 'number' ? flight.velocity : null,
+    onGround: mapped.onGround,
   }
 }
 
-const airports: Airport[] = [
-  { code: 'HAN', name: 'Hanoi', lat: 21.2213, lng: 105.808 },
-  { code: 'DAD', name: 'Da Nang', lat: 16.0439, lng: 108.212 },
-  { code: 'SGN', name: 'Ho Chi Minh City', lat: 10.8188, lng: 106.651 },
-  { code: 'CXR', name: 'Nha Trang', lat: 12.2213, lng: 109.191 },
-  { code: 'PQC', name: 'Phu Quoc', lat: 10.1667, lng: 103.983 },
-  { code: 'HPQ', name: 'Hai Phong', lat: 20.8421, lng: 106.726 },
-]
-
-// ================= MAIN COMPONENT =================
-export default function MapView({ 
-  selectedFlight, 
-  onSelectFlight 
-}: { 
-  selectedFlight: FlightMarkerData | null; 
-  onSelectFlight: (flight: FlightMarkerData) => void;
-}) {
-  const [flightMarkers, setFlightMarkers] = useState<FlightMarkerData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+export default function MapView({
+  selectedFlight,
+  onSelectFlight,
+  onFlightsChange,
+  searchTerm = '',
+  filter = 'all',
+  showAirports = true,
+}: MapViewProps) {
+  const [flights, setFlights] = useState<FlightMarkerData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let mounted = true
-    async function loadRealtimeFlights() {
+
+    async function loadFlights() {
       try {
-        const res = await api.get('/api/realtime-flights')
-        const markers = Array.isArray(res.data) ? (res.data.map(mapRealtimeFlight).filter(Boolean) as FlightMarkerData[]) : []
-        if (mounted) { setFlightMarkers(markers); setLastUpdated(new Date()) }
-      } catch { if (mounted) setFlightMarkers([]) } 
-      finally { if (mounted) setLoading(false) }
+        const response = await api.get('/api/realtime-flights')
+        const markers = Array.isArray(response.data)
+          ? (response.data.map(toMarker).filter(Boolean) as FlightMarkerData[])
+          : []
+        if (!mounted) return
+        setFlights(markers)
+        setError('')
+        onFlightsChange?.(markers)
+      } catch {
+        if (!mounted) return
+        setError('Live traffic is temporarily unavailable')
+        setFlights([])
+        onFlightsChange?.([])
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
-    loadRealtimeFlights()
-    const interval = window.setInterval(loadRealtimeFlights, 60000)
-    return () => { mounted = false; window.clearInterval(interval) }
-  }, [])
 
-  // Filter flights based on search
-  const filteredFlights = searchTerm.trim() 
-    ? flightMarkers.filter(f => f.callsign.toLowerCase().includes(searchTerm.toLowerCase()) || f.icao24.toLowerCase().includes(searchTerm.toLowerCase()))
-    : flightMarkers;
+    loadFlights()
+    const interval = window.setInterval(loadFlights, 60000)
+    return () => {
+      mounted = false
+      window.clearInterval(interval)
+    }
+  }, [onFlightsChange])
 
-  // Stats calculation
-  const airborneCount = flightMarkers.filter(f => !f.onGround).length;
-  const groundCount = flightMarkers.filter(f => f.onGround).length;
+  const visibleFlights = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+    return flights.filter((flight) => {
+      const matchesSearch = !query || flight.callsign.toLowerCase().includes(query) || flight.icao24.toLowerCase().includes(query)
+      const matchesFilter = filter === 'all' || (filter === 'airborne' && !flight.onGround) || (filter === 'ground' && flight.onGround)
+      return matchesSearch && matchesFilter
+    })
+  }, [filter, flights, searchTerm])
 
   return (
-    <div className="absolute inset-0 bg-[#0b101d]" style={{ zIndex: 0 }}>
-      
-      {/* TOP SEARCH BAR - ATC Style */}
-      <form 
-        onSubmit={(e) => e.preventDefault()} 
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl px-4 py-2 shadow-2xl shadow-black/60"
-      >
-        <Search className="h-4 w-4 text-slate-500" />
-        <input
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search callsign (e.g. VNA220)..."
-          className="w-64 bg-transparent border-none outline-none text-sm text-white placeholder-slate-500"
-        />
-        <div className="h-4 w-px bg-[#1f2b42]"></div>
-        <span className="text-[10px] font-mono text-slate-400">{lastUpdated?.toLocaleTimeString('en-GB') || '...'}</span>
-      </form>
-
-      <LeafletMapContainer center={[14.0, 108.0]} zoom={6} zoomControl={false} attributionControl={false} className="absolute inset-0 w-full h-full">
-        
-        {/* DARK MODE MAP LAYER */}
+    <div className="absolute inset-0 bg-[#07111f]">
+      <LeafletMapContainer center={[14, 108]} zoom={6} zoomControl={false} attributionControl={false} className="absolute inset-0 h-full w-full">
         <LeafletTileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-        
-        <LeafletZoomControl position="bottomright" />
-        <MapResizeHandler />
-        <MapControlBridge />
-        <FlyToSelected flight={selectedFlight} />
+        <MapLifecycle selectedFlight={selectedFlight} />
 
-        {airports.map((airport) => (
+        {showAirports && AIRPORTS.map((airport) => (
           <LeafletMarker key={airport.code} position={[airport.lat, airport.lng]} icon={createAirportIcon(airport.code)} />
         ))}
 
-        {filteredFlights.map((flight) => {
-          const isSelected = selectedFlight?.id === flight.id;
-          return (
-            <LeafletMarker
-              key={flight.id}
-              position={[flight.lat, flight.lng]}
-              icon={createPlaneIcon(isSelected ? null : flight.altitude, flight.onGround, flight.rotation)}
-              eventHandlers={{ click: () => onSelectFlight(flight) }}
-            />
-          )
-        })}
+        {visibleFlights.map((flight) => (
+          <LeafletMarker
+            key={flight.id}
+            position={[flight.lat, flight.lng]}
+            icon={createPlaneIcon(flight, selectedFlight?.id === flight.id)}
+            eventHandlers={{ click: () => onSelectFlight(flight) }}
+          />
+        ))}
       </LeafletMapContainer>
 
-      {/* BOTTOM STATS BAR */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-[#0b101d]/90 backdrop-blur-xl border border-[#1f2b42] rounded-xl px-6 py-3 shadow-2xl shadow-black/60 flex items-center gap-8">
-        <div className="flex items-center gap-2">
-          <Plane className="w-4 h-4 text-blue-400" />
-          <div>
-            <div className="text-xs text-slate-500">Airborne</div>
-            <div className="text-sm font-bold text-blue-400">{airborneCount}</div>
-          </div>
+      <div className="pointer-events-none absolute inset-0 z-[400] bg-[radial-gradient(circle_at_center,_transparent_40%,_rgba(3,8,16,0.3)_100%)]" />
+      {loading && (
+        <div className="absolute left-1/2 top-1/2 z-[900] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-slate-950/80 px-5 py-3 text-sm font-semibold text-slate-200 backdrop-blur">
+          Connecting to live traffic...
         </div>
-        <div className="h-8 w-px bg-[#1f2b42]"></div>
-        <div className="flex items-center gap-2">
-          <Navigation2 className="w-4 h-4 text-slate-400" />
-          <div>
-            <div className="text-xs text-slate-500">On Ground</div>
-            <div className="text-sm font-bold text-slate-300">{groundCount}</div>
-          </div>
+      )}
+      {!loading && error && (
+        <div className="absolute left-1/2 top-1/2 z-[900] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-amber-400/20 bg-slate-950/90 px-5 py-3 text-sm text-amber-200 backdrop-blur">
+          {error}
         </div>
-        <div className="h-8 w-px bg-[#1f2b42]"></div>
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-emerald-400" />
-          <div>
-            <div className="text-xs text-slate-500">Tracked</div>
-            <div className="text-sm font-bold text-emerald-400">{flightMarkers.length}</div>
-          </div>
-        </div>
-      </div>
-
+      )}
     </div>
   )
 }
