@@ -1,11 +1,11 @@
 'use client'
 
-import { type ComponentType, type PropsWithChildren, useEffect, useMemo, useState } from 'react'
+import { type ComponentType, type PropsWithChildren, useEffect, useMemo } from 'react'
 import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import api from '@/lib/axios'
-import { mapRealtimeFlight, type RealtimeFlight } from '@/lib/skytrack-data'
+import { useRealtimeFlights } from '@/app/hooks/use-realtime-flights'
+import { mapRealtimeFlight, type RealtimeFlight, type RealtimeFlightStatus } from '@/lib/skytrack-data'
 
 export interface FlightMarkerData {
   id: string
@@ -35,6 +35,7 @@ interface MapViewProps {
   selectedFlight: FlightMarkerData | null
   onSelectFlight: (flight: FlightMarkerData) => void
   onFlightsChange?: (flights: FlightMarkerData[]) => void
+  onStatusChange?: (status: RealtimeFlightStatus | null) => void
   searchTerm?: string
   filter?: FlightFilter
   showAirports?: boolean
@@ -135,44 +136,24 @@ export default function MapView({
   selectedFlight,
   onSelectFlight,
   onFlightsChange,
+  onStatusChange,
   searchTerm = '',
   filter = 'all',
   showAirports = true,
 }: MapViewProps) {
-  const [flights, setFlights] = useState<FlightMarkerData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { flights: realtimeFlights, status, loading, error } = useRealtimeFlights()
+  const flights = useMemo(
+    () => realtimeFlights.map(toMarker).filter(Boolean) as FlightMarkerData[],
+    [realtimeFlights],
+  )
 
   useEffect(() => {
-    let mounted = true
+    onFlightsChange?.(flights)
+  }, [flights, onFlightsChange])
 
-    async function loadFlights() {
-      try {
-        const response = await api.get('/api/realtime-flights')
-        const markers = Array.isArray(response.data)
-          ? (response.data.map(toMarker).filter(Boolean) as FlightMarkerData[])
-          : []
-        if (!mounted) return
-        setFlights(markers)
-        setError('')
-        onFlightsChange?.(markers)
-      } catch {
-        if (!mounted) return
-        setError('Live traffic is temporarily unavailable')
-        setFlights([])
-        onFlightsChange?.([])
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-
-    loadFlights()
-    const interval = window.setInterval(loadFlights, 60000)
-    return () => {
-      mounted = false
-      window.clearInterval(interval)
-    }
-  }, [onFlightsChange])
+  useEffect(() => {
+    onStatusChange?.(status)
+  }, [onStatusChange, status])
 
   const visibleFlights = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
@@ -212,6 +193,11 @@ export default function MapView({
       {!loading && error && (
         <div className="absolute left-1/2 top-1/2 z-[900] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-amber-400/20 bg-slate-950/90 px-5 py-3 text-sm text-amber-200 backdrop-blur">
           {error}
+        </div>
+      )}
+      {!loading && !error && status?.stale && (
+        <div className="absolute left-1/2 top-4 z-[900] -translate-x-1/2 rounded-full border border-amber-300/20 bg-slate-950/90 px-4 py-2 text-xs font-semibold text-amber-200 shadow-xl backdrop-blur">
+          Cached traffic · last source update {status.lastSuccessfulUpdate ? new Date(status.lastSuccessfulUpdate).toLocaleTimeString('en-GB') : 'unavailable'}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Bot, Clock3, MapPin, Plane, RotateCcw, Send, Sparkles, TrendingUp } from 'lucide-react'
+import { askAviationAssistant } from '@/lib/aviation-ai'
 
 interface Message {
   id: string
@@ -24,40 +25,35 @@ const QUICK_PROMPTS = [
   { icon: TrendingUp, label: 'Today statistics', prompt: 'Show me today flight statistics' },
 ]
 
-function createResponse(message: string) {
-  const query = message.toLowerCase()
-  if (query.includes('vn220')) return 'VN220 is scheduled from SGN to HAN. For the most current operational status, open Flight Search or Live Map from the navigation.'
-  if (query.includes('delay') || query.includes('sgn')) return 'Delay information depends on the live backend feed. Use Flight Search to filter delayed flights, or Live Map to inspect aircraft currently visible around SGN.'
-  if (query.includes('noi bai') || query.includes('han')) return 'Noi Bai International Airport uses IATA code HAN and serves Hanoi. It has separate domestic and international terminal operations.'
-  if (query.includes('statistic') || query.includes('stats')) return 'Your overview dashboard shows the latest flight, delay and passenger statistics returned by the backend service.'
-  return `I can help with “${message}”. This assistant is currently in guided demo mode, so live operational answers should be confirmed in Flight Search or Live Map.`
-}
-
 export default function AIAssistantPage() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
-  const timerRef = useRef<number | null>(null)
+  const [error, setError] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, typing])
 
-  useEffect(() => () => {
-    if (timerRef.current) window.clearTimeout(timerRef.current)
-  }, [])
-
-  function sendMessage(value = input) {
+  async function sendMessage(value = input) {
     const content = value.trim()
     if (!content || typing) return
-    setMessages((current) => [...current, { id: `user-${Date.now()}`, role: 'user', content, time: 'Just now' }])
+    const history = messages.map(({ role, content: messageContent }) => ({ role, content: messageContent }))
+    const userMessage: Message = { id: `user-${Date.now()}`, role: 'user', content, time: 'Just now' }
+    setMessages((current) => [...current, userMessage])
     setInput('')
     setTyping(true)
-    timerRef.current = window.setTimeout(() => {
-      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: 'assistant', content: createResponse(content), time: 'Just now' }])
+    setError('')
+
+    try {
+      const answer = await askAviationAssistant(content, history, 'user')
+      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: 'assistant', content: answer, time: 'Just now' }])
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'AI assistant is temporarily unavailable.')
+    } finally {
       setTyping(false)
-    }, 700)
+    }
   }
 
   return (
@@ -66,7 +62,7 @@ export default function AIAssistantPage() {
         <aside className="hidden flex-col rounded-[28px] bg-[#07111f] p-5 text-white shadow-xl xl:flex">
           <div className="flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600"><Sparkles className="h-5 w-5" /></span>
-            <div><div className="font-semibold">SkyTrack Copilot</div><div className="text-xs text-slate-500">Guided aviation assistant</div></div>
+            <div><div className="font-semibold">SkyTrack Copilot</div><div className="text-xs text-slate-500">Backend-powered aviation assistant</div></div>
           </div>
           <div className="mt-8 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">Suggested questions</div>
           <div className="mt-3 space-y-2">
@@ -77,8 +73,8 @@ export default function AIAssistantPage() {
             ))}
           </div>
           <div className="mt-auto rounded-2xl border border-amber-300/10 bg-amber-300/[0.06] p-4">
-            <div className="text-xs font-semibold text-amber-200">Demo assistant</div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Answers are informational. Confirm live status using backend-powered Flight Search.</p>
+            <div className="text-xs font-semibold text-blue-200">Aviation data context</div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Answers combine Gemini with SkyTrack airport, flight, traffic and weather APIs.</p>
           </div>
         </aside>
 
@@ -86,9 +82,9 @@ export default function AIAssistantPage() {
           <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
             <div className="flex items-center gap-3">
               <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Bot className="h-5 w-5" /><span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" /></span>
-              <div><h1 className="font-semibold text-slate-950">AI assistant</h1><p className="text-xs text-slate-500">Online · Responses in a few seconds</p></div>
+              <div><h1 className="font-semibold text-slate-950">AI assistant</h1><p className="text-xs text-slate-500">{error ? 'Connection problem' : 'Connected to SkyTrack aviation data'}</p></div>
             </div>
-            <button type="button" onClick={() => { setMessages(INITIAL_MESSAGES); setTyping(false); if (timerRef.current) window.clearTimeout(timerRef.current) }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+            <button type="button" onClick={() => { setMessages(INITIAL_MESSAGES); setTyping(false); setError('') }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
               <RotateCcw className="h-3.5 w-3.5" /><span className="hidden sm:inline">New chat</span>
             </button>
           </header>
@@ -106,6 +102,12 @@ export default function AIAssistantPage() {
               ))}
               {typing && (
                 <div className="flex gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-white"><Bot className="h-4 w-4" /></span><div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-4">{[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: `${dot * 120}ms` }} />)}</div></div>
+              )}
+              {error && (
+                <div className="ml-12 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  <div className="font-semibold">Could not get an AI response</div>
+                  <div className="mt-1">{error}</div>
+                </div>
               )}
               <div ref={endRef} />
             </div>

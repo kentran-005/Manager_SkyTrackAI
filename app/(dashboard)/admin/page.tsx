@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { ArrowRight, Bot, Sparkles } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
@@ -49,10 +51,6 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function AdminDashboard() {
-  const [aiInput, setAiInput] = useState("");
-  const [aiMessages, setAiMessages] = useState<{ q: string; a: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  
   // STATE LƯU DỮ LIỆU THẬT TỪ BACKEND
   const [stats, setStats] = useState<any>(null);
 
@@ -72,25 +70,8 @@ export default function AdminDashboard() {
     { label: "Total Passengers", value: stats?.totalPassengers ? `${stats.totalPassengers.toLocaleString()}+` : "...", sub: "+15.3%", subColor: "#22c55e", icon: "👥", iconBg: "#f5f3ff", iconColor: "#7c3aed" },
   ];
 
-  // Đổi sang gọi API Backend Spring Boot (Gemini) của chúng ta
-  async function sendAI() {
-    if (!aiInput.trim()) return;
-    const question = aiInput;
-    setAiInput("");
-    setLoading(true);
-    try {
-      const { data } = await api.post("/api/ai/chat", { question });
-      const answer = data.answer || "Sorry, I couldn't get a response.";
-      setAiMessages(prev => [...prev, { q: question, a: answer }]);
-    } catch {
-      setAiMessages(prev => [...prev, { q: question, a: "Connection error. Please check if Backend is running." }]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <>
+    <div className="min-h-[calc(100vh-72px)] bg-[#f4f7fb] p-4 sm:p-6 lg:p-8">
       <style precedence="default" href="/styles/dashboard-page">{`
         /* ── KPI CARDS ── */
         .kpi-grid {
@@ -123,24 +104,6 @@ export default function AdminDashboard() {
         }
         .delay-bar-bg { height: 6px; background: #f3f4f6; border-radius: 999px; overflow: hidden; flex: 1; }
         
-        /* AI chat */
-        .ai-messages { max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
-        .ai-input-row {
-          display: flex; gap: 8px; align-items: center;
-          border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; background: #f9fafb;
-        }
-        .ai-input {
-          flex: 1; border: none; outline: none; background: transparent;
-          font-size: 13px; color: #374151; font-family: inherit;
-        }
-        .ai-send {
-          background: #3b82f6; color: #fff; border: none; width: 30px; height: 30px;
-          border-radius: 8px; cursor: pointer; display: flex; align-items: center;
-          justify-content: center; font-size: 14px; flex-shrink: 0; transition: background .18s;
-        }
-        .ai-send:hover { background: #2563eb; }
-        .ai-send:disabled { background: #93c5fd; cursor: not-allowed; }
-
         .generate-btn {
           background: #f0f9ff; color: #3b82f6; border: 1.5px solid #bfdbfe;
           border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700;
@@ -254,33 +217,30 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="bottom-card" style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#3b82f6,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🤖</div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>AI Assistant</div>
-              <div style={{ fontSize: 11, color: "#9ca3af" }}>Ask me anything about flights...</div>
+        <div className="bottom-card relative overflow-hidden bg-[linear-gradient(145deg,#0f172a,#172554)] text-white">
+          <div className="absolute -right-14 -top-14 h-40 w-40 rounded-full bg-blue-500/25 blur-3xl" />
+          <div className="relative flex h-full min-h-[210px] flex-col">
+            <div className="flex items-center justify-between">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-500/15 text-blue-300">
+                <Bot className="h-5 w-5" />
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Gemini ready
+              </span>
             </div>
-          </div>
-
-          <div className="ai-messages" style={{ flex: 1 }}>
-            {aiMessages.length === 0 && <p style={{ fontSize: 12, color: "#d1d5db", textAlign: "center", padding: "16px 0" }}>Ask a question about today&apos;s flights</p>}
-            {aiMessages.map((m, i) => (
-              <div key={i} style={{ marginBottom: 10 }}>
-                <div style={{ background: "#eff6ff", borderRadius: "10px 10px 2px 10px", padding: "7px 11px", fontSize: 12, color: "#1d4ed8", marginBottom: 5, display: "inline-block", maxWidth: "90%", marginLeft: "auto", float: "right", clear: "both" }}>{m.q}</div>
-                <div style={{ clear: "both" }} />
-                <div style={{ background: "#f9fafb", borderRadius: "2px 10px 10px 10px", padding: "7px 11px", fontSize: 12, color: "#374151", lineHeight: 1.5, maxWidth: "95%" }}>{m.a}</div>
+            <div className="mt-5">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-blue-300">
+                <Sparkles className="h-3.5 w-3.5" /> AI operations
               </div>
-            ))}
-            {loading && <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>AI is thinking…</div>}
-          </div>
-
-          <div className="ai-input-row">
-            <input className="ai-input" placeholder="Type your question..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()} />
-            <button className="ai-send" onClick={sendAI} disabled={loading || !aiInput.trim()}>➤</button>
+              <h3 className="mt-2 text-xl font-semibold">Analyze aviation data in a full workspace.</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Ask about flights, managed airports, weather, delays and current system statistics.</p>
+            </div>
+            <Link href="/admin/ai" className="mt-auto flex items-center justify-between rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500">
+              Open AI workspace <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

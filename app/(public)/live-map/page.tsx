@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { FlightMarkerData } from '../../components/MapView'
+import type { RealtimeFlightStatus } from '@/lib/skytrack-data'
 
 const MapView = dynamic(() => import('../../components/MapView'), { ssr: false })
 type FlightFilter = 'all' | 'airborne' | 'ground'
@@ -34,6 +35,7 @@ function formatSpeed(value: number | null) {
 export default function LiveMapPage() {
   const [flights, setFlights] = useState<FlightMarkerData[]>([])
   const [selectedFlight, setSelectedFlight] = useState<FlightMarkerData | null>(null)
+  const [trafficStatus, setTrafficStatus] = useState<RealtimeFlightStatus | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<FlightFilter>('all')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -56,6 +58,7 @@ export default function LiveMapPage() {
         selectedFlight={selectedFlight}
         onSelectFlight={setSelectedFlight}
         onFlightsChange={setFlights}
+        onStatusChange={setTrafficStatus}
         searchTerm={searchTerm}
         filter={filter}
       />
@@ -65,10 +68,12 @@ export default function LiveMapPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                {!trafficStatus?.stale && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />}
+                <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${trafficStatus?.stale ? 'bg-amber-400' : 'bg-emerald-400'}`} />
               </span>
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">Live traffic</span>
+              <span className={`text-xs font-bold uppercase tracking-[0.2em] ${trafficStatus?.stale ? 'text-amber-300' : 'text-emerald-300'}`}>
+                {trafficStatus?.stale ? 'Cached traffic' : 'Live traffic'}
+              </span>
             </div>
             <button type="button" onClick={() => setSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Close traffic panel">
               <X className="h-4 w-4" />
@@ -109,6 +114,16 @@ export default function LiveMapPage() {
               </button>
             ))}
           </div>
+          {trafficStatus?.stale && (
+            <div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.08] px-3 py-2 text-[11px] leading-5 text-amber-100">
+              {trafficStatus.message}
+              {trafficStatus.lastSuccessfulUpdate && (
+                <div className="text-amber-200/70">
+                  Source updated {new Date(trafficStatus.lastSuccessfulUpdate).toLocaleString()}.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2 [scrollbar-color:#334155_transparent]">

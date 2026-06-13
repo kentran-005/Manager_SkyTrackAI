@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
+import { useEffect, useRef, useState } from "react";
+import buttonStyle from "./css/button.module.css";
 import switchStyle from "./css/switch.module.css";
-import { useState } from "react";
-import styles from "./css/button.module.css"
 import {
   Settings,
   Bell,
@@ -10,21 +10,19 @@ import {
   Cloud,
   Database,
   Info,
-  Save,
   RefreshCw,
   Download,
-  Upload,
-  Check,
   Globe,
   Clock,
   Calendar,
   Zap,
   Server,
-  Cpu,
-  HardDrive,
   Activity,
   ChevronRight,
 } from "lucide-react";
+import api from "@/lib/axios";
+import { testBackendService } from "@/lib/aviation-ai";
+import type { BackendAirport } from "@/lib/skytrack-data";
 
 // ── Types ──
 interface ToggleProps {
@@ -32,29 +30,83 @@ interface ToggleProps {
   onChange: (val: boolean) => void;
 }
 
+interface SystemSettingsPayload {
+  systemName: string;
+  defaultAirport: string;
+  timezone: string;
+  language: string;
+  dateFormat: string;
+  timeFormat: string;
+  notifications: {
+    flightDelay: boolean;
+    airport: boolean;
+    weather: boolean;
+    aiPrediction: boolean;
+    maintenance: boolean;
+  };
+  security: {
+    minPasswordLength: number;
+    requireUppercase: boolean;
+    requireNumbers: boolean;
+    requireSpecial: boolean;
+    sessionTimeoutMinutes: number;
+    maxLoginAttempts: number;
+  };
+  ai: {
+    delayPrediction: boolean;
+    weatherAnalysis: boolean;
+    aiSummary: boolean;
+    smartRecommendations: boolean;
+  };
+}
+
+interface SettingsBackup {
+  format: string;
+  createdAt: string;
+  settings: SystemSettingsPayload;
+}
+
+interface SystemInfo {
+  version?: string;
+  environment?: string;
+  database?: string;
+  backend?: string;
+  frontend?: string;
+  uptimeSeconds?: number;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  storageUsage?: number;
+  availableProcessors?: number;
+  lastBackupAt?: string | null;
+}
+
+function formatUptime(seconds = 0) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return days > 0 ? `${days}d ${hours}h` : `${hours}h ${minutes}m`;
+}
+
 // ── Toggle Component ──
 function Toggle({ checked, onChange }: ToggleProps) {
   return (
-    <label className={switchStyle.switch}>
+    <label className={switchStyle["plane-switch"]}>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
+        aria-label={checked ? "Enabled" : "Disabled"}
       />
-
-      <span className={switchStyle.slider}></span>
-
-      <img
-        src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAQABADASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAIG/8QAIxAAAgIABQQDAAAAAAAAAAAAAQMCBAAREiExBUFRcROBsf/EABQBAQAAAAAAAAAAAAAAAAAAAAX/xAAWEQADAAAAAAAAAAAAAAAAAAAAEiL/2gAMAwEAAhEDEQA/AMBTp03dNglMVuttjqnKQ2UPOfntkOThbqVVUJ12BKnogZQZpy+Ucc8knwePWJrWqyqEHVmrTahEBqpbBoAH1n635wt3a9mjN1p8X2pw0qVEbKB/CO/c4OphSVP/2Q=="
-        className={switchStyle.off}
-        alt=""
-      />
-
-      <img
-        src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAQABADASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQIEBf/EACMQAAEDAwQDAQEAAAAAAAAAAAQBAgUDESEAEjFBBlFhMkL/xAAUAQEAAAAAAAAAAAAAAAAAAAAF/8QAGBEAAwEBAAAAAAAAAAAAAAAAABIiMUH/2gAMAwEAAhEDEQA/AM+Bg4mS8coRccMOdNG01qVyH/kRvHPKKmMdr8uujPwUTG+NkRpw1AKWCbvHKa2zTGphc9u9p0q+rLqeMl4kSCGkYgtoE0HTahIz3bWGNanPrdyqWzn7p5ibh5CArnyZNMyVLpK0QSkt2BNXtVX+7ol1wuLJiyaHt+6Kyp//2Q=="
-        className={switchStyle.on}
-        alt=""
-      />
+      <div>
+        <div>
+          <svg viewBox="0 0 13 13" aria-hidden="true">
+            <path d="M1.55989957,5.41666667 L5.51582215,5.41666667 L4.47015462,0.108333333 C4.47015462,0.0634601974 4.49708054,0.0249592654 4.5354546,0.00851337035 L4.57707145,0 L5.36229752,0 C5.43359776,0 5.50087375,0.028779451 5.55026392,0.0782711996 L5.59317877,0.134368264 L7.13659662,2.81558333 L8.29565964,2.81666667 C8.53185377,2.81666667 8.72332694,3.01067661 8.72332694,3.25 C8.72332694,3.48932339 8.53185377,3.68333333 8.29565964,3.68333333 L7.63589819,3.68225 L8.63450135,5.41666667 L11.9308317,5.41666667 C12.5213171,5.41666667 13,5.90169152 13,6.5 C13,7.09830848 12.5213171,7.58333333 11.9308317,7.58333333 L8.63450135,7.58333333 L7.63589819,9.31666667 L8.29565964,9.31666667 C8.53185377,9.31666667 8.72332694,9.51067661 8.72332694,9.75 C8.72332694,9.98932339 8.53185377,10.1833333 8.29565964,10.1833333 L7.13659662,10.1833333 L5.59317877,12.8656317 C5.55725264,12.9280353 5.49882018,12.9724157 5.43174295,12.9907056 L5.36229752,13 L4.57707145,13 C4.51267695,12.9890959 4.48069792,12.9547924 4.47230803,12.9134397 L5.51582215,7.58333333 L1.55989957,7.58333333 L0.891288881,8.55114605 C0.853775374,8.60544678 0.798421006,8.64327676 0.73629202,8.65879796 L0.106844414,8.66666667 C0.0297243066,8.6457608 0.00275502199,8.60729104 0,8.5651586 L0.580855011,6.85813984 C0.64492547,6.67265611 0.6577034,6.47392717 0.619193545,6.28316421 L0.00601851064,4.48064746 C0.00203480725,4.4691314 0,4.45701613 0,4.44481314 C0,4.39994001 0.0269259152,4.36143908 0.0652999725,4.34499318 L0.672546853,4.33647981 C0.737865848,4.33647981 0.80011301,4.36066329 0.848265401,4.40322477 L1.55989957,5.41666667 Z" fill="currentColor" />
+          </svg>
+        </div>
+        <span className={switchStyle["street-middle"]} />
+        <span className={switchStyle.cloud} />
+        <span className={`${switchStyle.cloud} ${switchStyle.two}`} />
+      </div>
     </label>
   );
 }
@@ -108,17 +160,54 @@ function SettingRow({
 }
 
 // ── API Badge ──
-function ApiBadge({ status }: { status: "connected" | "error" | "testing" }) {
+type ApiStatus = "idle" | "connected" | "error" | "testing";
+
+function ApiBadge({ status }: { status: ApiStatus }) {
   const styles = {
+    idle: "bg-slate-100 text-slate-500",
     connected: "bg-emerald-50 text-emerald-600",
     error: "bg-red-50 text-red-500",
     testing: "bg-amber-50 text-amber-600",
   };
-  const labels = { connected: "Connected", error: "Error", testing: "Testing..." };
+  const labels = { idle: "Not tested", connected: "Connected", error: "Error", testing: "Testing..." };
   return (
     <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${styles[status]}`}>
       {labels[status]}
     </span>
+  );
+}
+
+function SaveButton({
+  section,
+  savedSection,
+  onSave,
+  saving,
+}: {
+  section: string;
+  savedSection: string | null;
+  onSave: (section: string) => void;
+  saving?: boolean;
+}) {
+  const isSaved = savedSection === section;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSave(section)}
+      disabled={saving}
+      className={buttonStyle.btn}
+    >
+      <span className={buttonStyle.label}>
+        {saving ? "Saving..." : isSaved ? "Saved" : "Save changes"}
+      </span>
+      <span className={buttonStyle.containerStars} aria-hidden="true">
+        <span className={buttonStyle.stars} />
+      </span>
+      <span className={buttonStyle.glow} aria-hidden="true">
+        <span className={buttonStyle.circle} />
+        <span className={buttonStyle.circle} />
+      </span>
+    </button>
   );
 }
 
@@ -131,6 +220,7 @@ export default function AdminSettingsPage() {
   const [language, setLanguage] = useState("en");
   const [dateFormat, setDateFormat] = useState("DD/MM/YYYY");
   const [timeFormat, setTimeFormat] = useState("24h");
+  const [managedAirports, setManagedAirports] = useState<BackendAirport[]>([]);
 
   // Notifications
   const [notif, setNotif] = useState({
@@ -150,8 +240,6 @@ export default function AdminSettingsPage() {
   const [maxLoginAttempts, setMaxLoginAttempts] = useState(5);
 
   // AI
-  const [aiProvider, setAiProvider] = useState("gemini");
-  const [aiModel, setAiModel] = useState("gemini-2.5-flash");
   const [aiFeatures, setAiFeatures] = useState({
     delayPrediction: true,
     weatherAnalysis: true,
@@ -161,24 +249,176 @@ export default function AdminSettingsPage() {
 
   // Saved indicator
   const [savedSection, setSavedSection] = useState<string | null>(null);
+  const [apiStatuses, setApiStatuses] = useState<Record<"flights" | "airports" | "weather" | "ai", ApiStatus>>({
+    flights: "idle",
+    airports: "idle",
+    weather: "idle",
+    ai: "idle",
+  });
+  const [apiError, setApiError] = useState("");
+  const [settingsError, setSettingsError] = useState("");
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo>({});
+  const [backup, setBackup] = useState<SettingsBackup | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState("");
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = (section: string) => {
-    setSavedSection(section);
-    setTimeout(() => setSavedSection(null), 2000);
+  useEffect(() => {
+    Promise.all([
+      api.get<BackendAirport[]>("/api/airports"),
+      api.get<SystemSettingsPayload>("/api/admin/settings"),
+      api.get<SystemInfo>("/api/admin/system-info"),
+    ])
+      .then(([airportsResponse, settingsResponse, infoResponse]) => {
+        const airports = Array.isArray(airportsResponse.data) ? airportsResponse.data : [];
+        const settings = settingsResponse.data;
+        setManagedAirports(airports);
+        setSystemName(settings.systemName);
+        setDefaultAirport(settings.defaultAirport);
+        setTimezone(settings.timezone);
+        setLanguage(settings.language);
+        setDateFormat(settings.dateFormat);
+        setTimeFormat(settings.timeFormat);
+        setNotif(settings.notifications);
+        setMinPassLen(settings.security.minPasswordLength);
+        setRequireUpper(settings.security.requireUppercase);
+        setRequireNumbers(settings.security.requireNumbers);
+        setRequireSpecial(settings.security.requireSpecial);
+        setSessionTimeout(String(settings.security.sessionTimeoutMinutes));
+        setMaxLoginAttempts(settings.security.maxLoginAttempts);
+        setAiFeatures(settings.ai);
+        setSystemInfo(infoResponse.data);
+      })
+      .catch((requestError) => {
+        setSettingsError(requestError instanceof Error ? requestError.message : "Could not load settings.");
+      })
+      .finally(() => setLoadingSettings(false));
+  }, []);
+
+  const testService = async (service: "flights" | "airports" | "weather" | "ai") => {
+    setApiStatuses((current) => ({ ...current, [service]: "testing" }));
+    setApiError("");
+    const selectedAirport = managedAirports.find((airport) => airport.code === defaultAirport);
+
+    try {
+      await testBackendService(service, selectedAirport);
+      setApiStatuses((current) => ({ ...current, [service]: "connected" }));
+    } catch (requestError) {
+      setApiStatuses((current) => ({ ...current, [service]: "error" }));
+      setApiError(requestError instanceof Error ? requestError.message : "Service test failed.");
+    }
   };
 
-  const SaveButton = ({ section }: { section: string }) => (
-    <button type="button" onClick={() => handleSave(section)} className={styles.btn}>
-      <strong className={styles.label}>{savedSection === section ? "Saved" : "🗁Save Changes"}</strong>
-      <div className={styles.containerStars}>
-        <div className={styles.stars} />
-      </div>
-      <div className={styles.glow}>
-        <div className={styles.circle} />
-        <div className={styles.circle} />
-      </div>
-    </button>
-  );
+  const testAllServices = async () => {
+    await Promise.all(
+      (["flights", "airports", "weather", "ai"] as const).map((service) => testService(service)),
+    );
+  };
+
+  const settingsPayload = (): SystemSettingsPayload => ({
+    systemName,
+    defaultAirport,
+    timezone,
+    language,
+    dateFormat,
+    timeFormat,
+    notifications: notif,
+    security: {
+      minPasswordLength: minPassLen,
+      requireUppercase: requireUpper,
+      requireNumbers,
+      requireSpecial,
+      sessionTimeoutMinutes: Number(sessionTimeout),
+      maxLoginAttempts,
+    },
+    ai: aiFeatures,
+  });
+
+  const applySettings = (settings: SystemSettingsPayload) => {
+    setSystemName(settings.systemName);
+    setDefaultAirport(settings.defaultAirport);
+    setTimezone(settings.timezone);
+    setLanguage(settings.language);
+    setDateFormat(settings.dateFormat);
+    setTimeFormat(settings.timeFormat);
+    setNotif(settings.notifications);
+    setMinPassLen(settings.security.minPasswordLength);
+    setRequireUpper(settings.security.requireUppercase);
+    setRequireNumbers(settings.security.requireNumbers);
+    setRequireSpecial(settings.security.requireSpecial);
+    setSessionTimeout(String(settings.security.sessionTimeoutMinutes));
+    setMaxLoginAttempts(settings.security.maxLoginAttempts);
+    setAiFeatures(settings.ai);
+  };
+
+  const handleSave = async (section: string) => {
+    setSavingSection(section);
+    setSettingsError("");
+    try {
+      const response = await api.put<SystemSettingsPayload>("/api/admin/settings", settingsPayload());
+      applySettings(response.data);
+      setSavedSection(section);
+      window.setTimeout(() => setSavedSection(null), 2000);
+    } catch (requestError) {
+      setSettingsError(requestError instanceof Error ? requestError.message : "Could not save settings.");
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const refreshSystemInfo = async () => {
+    const response = await api.get<SystemInfo>("/api/admin/system-info");
+    setSystemInfo(response.data);
+  };
+
+  const createBackup = async () => {
+    setBackupBusy(true);
+    setBackupMessage("");
+    try {
+      const response = await api.post<SettingsBackup>("/api/admin/backup");
+      setBackup(response.data);
+      setBackupMessage("Configuration backup created successfully.");
+      await refreshSystemInfo();
+    } catch (requestError) {
+      setBackupMessage(requestError instanceof Error ? requestError.message : "Could not create backup.");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const downloadBackup = async () => {
+    let currentBackup = backup;
+    if (!currentBackup) {
+      const response = await api.post<SettingsBackup>("/api/admin/backup");
+      currentBackup = response.data;
+      setBackup(currentBackup);
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(currentBackup, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `skytrack-settings-${new Date().toISOString().replaceAll(":", "-")}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const restoreBackup = async (file?: File) => {
+    if (!file) return;
+    setBackupBusy(true);
+    setBackupMessage("");
+    try {
+      const parsed = JSON.parse(await file.text()) as SettingsBackup;
+      const response = await api.post<SystemSettingsPayload>("/api/admin/backup/restore", parsed);
+      applySettings(response.data);
+      setBackupMessage("Configuration restored successfully.");
+    } catch (requestError) {
+      setBackupMessage(requestError instanceof Error ? requestError.message : "Invalid backup file.");
+    } finally {
+      setBackupBusy(false);
+      if (restoreInputRef.current) restoreInputRef.current.value = "";
+    }
+  };
 
   // Sidebar tabs
   const sidebarTabs = [
@@ -193,7 +433,7 @@ export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
 
   return (
-    <main className="p-8 bg-slate-50 min-h-screen font-sans text-slate-800 antialiased">
+    <main className="min-h-screen bg-slate-50 p-4 font-sans text-slate-800 antialiased sm:p-6 lg:p-8">
 
       {/* ── PAGE HEADER ── */}
       <div className="flex items-center gap-3 mb-8">
@@ -206,10 +446,21 @@ export default function AdminSettingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-6 items-start">
+      {settingsError && (
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {settingsError}
+        </div>
+      )}
+      {loadingSettings && (
+        <div className="mb-6 flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <RefreshCw className="h-4 w-4 animate-spin" /> Loading system settings...
+        </div>
+      )}
+
+      <div className="flex flex-col items-start gap-6 lg:flex-row">
 
         {/* ── SIDEBAR TABS ── */}
-        <aside className="w-56 flex-shrink-0 bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden sticky top-6">
+        <aside className="flex w-full flex-shrink-0 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-xs lg:sticky lg:top-6 lg:block lg:w-56 lg:overflow-hidden">
           {sidebarTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -217,7 +468,7 @@ export default function AdminSettingsPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors border-b border-slate-50 last:border-0 cursor-pointer ${
+                className={`flex min-w-40 items-center gap-3 border-b border-slate-50 px-4 py-3.5 text-left transition-colors last:border-0 lg:w-full lg:min-w-0 ${
                   isActive
                     ? "bg-blue-50 border-l-2 border-l-blue-600"
                     : "hover:bg-slate-50"
@@ -263,10 +514,12 @@ export default function AdminSettingsPage() {
                       onChange={(e) => setDefaultAirport(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 transition appearance-none cursor-pointer"
                     >
-                      <option value="SGN">Tan Son Nhat Intl Airport (SGN)</option>
-                      <option value="HAN">Noi Bai Intl Airport (HAN)</option>
-                      <option value="DAD">Da Nang Intl Airport (DAD)</option>
-                      <option value="CXR">Cam Ranh Intl Airport (CXR)</option>
+                      {managedAirports.length === 0 && <option value="">No managed airports available</option>}
+                      {managedAirports.map((airport) => (
+                        <option key={airport.id ?? airport.code} value={airport.code ?? airport.iata}>
+                          {airport.name} ({airport.code ?? airport.iata})
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -329,7 +582,7 @@ export default function AdminSettingsPage() {
                     </div>
                   </div>
                   <div className="pt-2 flex justify-end">
-                    <SaveButton section="general" />
+                    <SaveButton section="general" savedSection={savedSection} onSave={handleSave} saving={savingSection === "general"} />
                   </div>
                 </div>
               </SectionCard>
@@ -357,7 +610,7 @@ export default function AdminSettingsPage() {
                 <Toggle checked={notif.maintenance} onChange={(v) => setNotif({ ...notif, maintenance: v })} />
               </SettingRow>
               <div className="pt-4 flex justify-end">
-                <SaveButton section="notifications" />
+                <SaveButton section="notifications" savedSection={savedSection} onSave={handleSave} saving={savingSection === "notifications"} />
               </div>
             </SectionCard>
           )}
@@ -420,7 +673,7 @@ export default function AdminSettingsPage() {
                   />
                 </div>
                 <div className="pt-2 flex justify-end">
-                  <SaveButton section="security" />
+                  <SaveButton section="security" savedSection={savedSection} onSave={handleSave} saving={savingSection === "security"} />
                 </div>
               </div>
             </SectionCard>
@@ -435,13 +688,11 @@ export default function AdminSettingsPage() {
                     AI Provider
                   </label>
                   <select
-                    value={aiProvider}
-                    onChange={(e) => setAiProvider(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 transition cursor-pointer"
+                    value="gemini"
+                    disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm text-slate-600"
                   >
                     <option value="gemini">Gemini</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic Claude</option>
                   </select>
                 </div>
                 <div>
@@ -449,13 +700,11 @@ export default function AdminSettingsPage() {
                     AI Model
                   </label>
                   <select
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:border-blue-400 transition cursor-pointer"
+                    value="backend"
+                    disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm text-slate-600"
                   >
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    <option value="backend">Configured by the Spring Boot backend</option>
                   </select>
                 </div>
                 <SettingRow label="Enable Flight Delay Prediction">
@@ -471,10 +720,15 @@ export default function AdminSettingsPage() {
                   <Toggle checked={aiFeatures.smartRecommendations} onChange={(v) => setAiFeatures({ ...aiFeatures, smartRecommendations: v })} />
                 </SettingRow>
                 <div className="pt-2 flex items-center gap-3 justify-end">
-                  <button className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-purple-200 text-purple-600 hover:bg-purple-50 transition cursor-pointer">
-                    <Zap size={14} /> Test AI Connection
+                  <button
+                    type="button"
+                    onClick={() => void testService("ai")}
+                    disabled={apiStatuses.ai === "testing"}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-purple-200 text-purple-600 hover:bg-purple-50 transition disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <Zap size={14} /> {apiStatuses.ai === "testing" ? "Testing..." : "Test AI Connection"}
                   </button>
-                  <SaveButton section="ai" />
+                  <SaveButton section="ai" savedSection={savedSection} onSave={handleSave} saving={savingSection === "ai"} />
                 </div>
               </div>
             </SectionCard>
@@ -486,13 +740,13 @@ export default function AdminSettingsPage() {
               <SectionCard icon={Cloud} title="API Services" iconColor="text-cyan-600" iconBg="bg-cyan-50">
                 <div className="space-y-3">
                   {[
-                    { name: "Flight Data API", provider: "AviationStack", status: "connected" as const },
-                    { name: "Airport Data API", provider: "AirportDB", status: "connected" as const },
-                    { name: "Weather API", provider: "OpenWeather", status: "connected" as const },
-                    { name: "AI Service", provider: "Gemini API", status: "connected" as const },
+                    { key: "flights" as const, name: "Flight Data API", provider: "SkyTrack flights" },
+                    { key: "airports" as const, name: "Airport Data API", provider: "Managed airports" },
+                    { key: "weather" as const, name: "Weather API", provider: "OpenWeather" },
+                    { key: "ai" as const, name: "AI Service", provider: "Gemini API" },
                   ].map((api) => (
                     <div
-                      key={api.name}
+                      key={api.key}
                       className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100"
                     >
                       <div className="flex items-center gap-3">
@@ -505,15 +759,29 @@ export default function AdminSettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <ApiBadge status={api.status} />
-                        <button className="text-xs font-semibold px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition cursor-pointer">
-                          Test
+                        <ApiBadge status={apiStatuses[api.key]} />
+                        <button
+                          type="button"
+                          onClick={() => void testService(api.key)}
+                          disabled={apiStatuses[api.key] === "testing"}
+                          className="text-xs font-semibold px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-white hover:border-blue-300 hover:text-blue-600 transition disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {apiStatuses[api.key] === "testing" ? "Testing" : "Test"}
                         </button>
                       </div>
                     </div>
                   ))}
+                  {apiError && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {apiError}
+                    </div>
+                  )}
                   <div className="pt-2 flex justify-end">
-                    <button className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => void testAllServices()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer"
+                    >
                       <RefreshCw size={14} /> Test All Connections
                     </button>
                   </div>
@@ -531,30 +799,61 @@ export default function AdminSettingsPage() {
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Last Backup</p>
                     <div className="flex items-center gap-2 p-4 bg-slate-50 rounded-xl border border-slate-100 mb-4">
                       <Calendar className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm font-semibold text-slate-700">01/06/2026 10:30:00</span>
+                      <span className="text-sm font-semibold text-slate-700">
+                        {systemInfo.lastBackupAt
+                          ? new Date(systemInfo.lastBackupAt).toLocaleString()
+                          : "No backup created yet"}
+                      </span>
                     </div>
                     <div className="flex gap-3">
-                      <button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition cursor-pointer">
-                        <Database size={14} /> Create Backup
+                      <button
+                        type="button"
+                        onClick={() => void createBackup()}
+                        disabled={backupBusy}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition disabled:cursor-wait disabled:opacity-60"
+                      >
+                        <Database size={14} /> {backupBusy ? "Working..." : "Create Backup"}
                       </button>
-                      <button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl transition cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => void downloadBackup()}
+                        disabled={backupBusy}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl transition disabled:cursor-wait disabled:opacity-60"
+                      >
                         <Download size={14} /> Download Backup
                       </button>
                     </div>
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Restore Database</p>
+                    <input
+                      ref={restoreInputRef}
+                      type="file"
+                      accept="application/json,.json"
+                      className="hidden"
+                      onChange={(event) => void restoreBackup(event.target.files?.[0])}
+                    />
                     <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4">
-                      <span className="text-sm text-slate-400 flex-1">Choose backup file...</span>
-                      <button className="text-xs font-semibold px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:border-blue-300 hover:text-blue-600 transition cursor-pointer">
+                      <span className="text-sm text-slate-400 flex-1">SkyTrack settings JSON only</span>
+                      <button
+                        type="button"
+                        onClick={() => restoreInputRef.current?.click()}
+                        disabled={backupBusy}
+                        className="text-xs font-semibold px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:border-blue-300 hover:text-blue-600 transition disabled:cursor-wait disabled:opacity-60"
+                      >
                         Browse
                       </button>
                     </div>
-                    <button className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 text-sm font-semibold rounded-xl transition cursor-pointer">
-                      <Upload size={14} /> Restore Database
-                    </button>
+                    <p className="text-xs leading-5 text-slate-400">
+                      Selecting a valid backup restores settings immediately. Operational database backups should be managed at MySQL level.
+                    </p>
                   </div>
                 </div>
+                {backupMessage && (
+                  <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    {backupMessage}
+                  </div>
+                )}
               </SectionCard>
             </div>
           )}
@@ -566,12 +865,12 @@ export default function AdminSettingsPage() {
                 {/* Info Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
                   {[
-                    { label: "Version", value: "v1.0.0", icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
-                    { label: "Environment", value: "Production", icon: Server, color: "text-emerald-600", bg: "bg-emerald-50" },
-                    { label: "Database", value: "MySQL 8.0", icon: Database, color: "text-amber-600", bg: "bg-amber-50" },
-                    { label: "Backend", value: "Spring Boot 3", icon: Zap, color: "text-purple-600", bg: "bg-purple-50" },
-                    { label: "Frontend", value: "Next.js 15", icon: Globe, color: "text-cyan-600", bg: "bg-cyan-50" },
-                    { label: "Server Uptime", value: "256 Days", icon: Clock, color: "text-rose-600", bg: "bg-rose-50" },
+                    { label: "Version", value: `v${systemInfo.version ?? "1.0.0"}`, icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
+                    { label: "Environment", value: systemInfo.environment ?? "Unknown", icon: Server, color: "text-emerald-600", bg: "bg-emerald-50" },
+                    { label: "Database", value: systemInfo.database ?? "Unknown", icon: Database, color: "text-amber-600", bg: "bg-amber-50" },
+                    { label: "Backend", value: systemInfo.backend ?? "Unknown", icon: Zap, color: "text-purple-600", bg: "bg-purple-50" },
+                    { label: "Frontend", value: systemInfo.frontend ?? "Unknown", icon: Globe, color: "text-cyan-600", bg: "bg-cyan-50" },
+                    { label: "Server Uptime", value: formatUptime(systemInfo.uptimeSeconds), icon: Clock, color: "text-rose-600", bg: "bg-rose-50" },
                   ].map((item) => {
                     const Icon = item.icon;
                     return (
@@ -590,24 +889,35 @@ export default function AdminSettingsPage() {
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Resource Usage</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[
-                    { label: "CPU Usage", value: 42, color: "bg-blue-500" },
-                    { label: "RAM Usage", value: 58, color: "bg-emerald-500" },
-                    { label: "Storage Usage", value: 65, color: "bg-amber-500" },
-                    { label: "Disk Usage", value: 48, color: "bg-purple-500" },
+                    { label: "CPU Usage", value: systemInfo.cpuUsage ?? 0, color: "bg-blue-500" },
+                    { label: "JVM Memory", value: systemInfo.memoryUsage ?? 0, color: "bg-emerald-500" },
+                    { label: "Storage Usage", value: systemInfo.storageUsage ?? 0, color: "bg-amber-500" },
+                    { label: "Processors", value: systemInfo.availableProcessors ?? 0, color: "bg-purple-500", suffix: " cores", percentage: false },
                   ].map((resource) => (
                     <div key={resource.label}>
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-xs font-medium text-slate-600">{resource.label}</span>
-                        <span className="text-xs font-bold text-slate-800">{resource.value}%</span>
+                        <span className="text-xs font-bold text-slate-800">{resource.value}{resource.suffix ?? "%"}</span>
                       </div>
-                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-1.5 rounded-full ${resource.color}`}
-                          style={{ width: `${resource.value}%` }}
-                        />
-                      </div>
+                      {resource.percentage !== false && (
+                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${resource.color}`}
+                            style={{ width: `${Math.min(100, resource.value)}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
+                </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void refreshSystemInfo()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
+                  >
+                    <RefreshCw size={14} /> Refresh metrics
+                  </button>
                 </div>
               </SectionCard>
             </div>

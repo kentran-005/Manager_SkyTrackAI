@@ -39,7 +39,7 @@ const ADMIN_LINKS: NavLink[] = [
   { icon: Building2, label: 'Airports', href: '/admin/airports' },
   { icon: Plane, label: 'Airlines', href: '/admin/airlines' },
   { icon: PlaneTakeoff, label: 'Flights', href: '/admin/flights' },
-  { icon: Users, label: 'Passengers', href: '/admin/passengers' },
+  { icon: Users, label: 'Passengers', href: '/admin/reports' },
   { icon: UsersRound, label: 'Users', href: '/admin/users' },
   { icon: Bot, label: 'AI Summary', href: '/admin/ai' },
   { icon: Settings, label: 'Settings', href: '/admin/settings' },
@@ -62,6 +62,18 @@ const PAGE_TITLES: Record<string, string> = {
   '/user/ai': 'AI assistant',
   '/user/profile': 'Profile',
   '/admin': 'Admin overview',
+  '/admin/airports': 'Airport management',
+  '/admin/airlines': 'Airline management',
+  '/admin/flights': 'Flight management',
+  '/admin/passengers': 'Passenger management',
+  '/admin/users': 'User management',
+  '/admin/ai': 'AI operations',
+  '/admin/settings': 'System settings',
+}
+
+function isActiveRoute(pathname: string, href: string) {
+  if (href === '/admin' || href === '/user') return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -104,7 +116,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-[#f4f7fb] text-slate-950">
       {sidebarOpen && <button type="button" aria-label="Close navigation overlay" className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-white/10 bg-[#07111f] px-4 py-5 text-white shadow-2xl transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col overflow-y-auto border-r border-white/10 bg-[#07111f] px-4 py-5 text-white shadow-2xl transition-transform duration-300 [scrollbar-color:#1e3a5f_transparent] [scrollbar-width:thin] lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-2">
           <Link href={isAdminRoute ? '/admin' : '/user'} className="flex items-center gap-3">
             <span className="relative grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-600/25">
@@ -129,9 +141,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="mt-3 space-y-1">
           {links.map((link) => {
             const Icon = link.icon
-            const active = pathname === link.href || (link.href !== '/user' && link.href !== '/admin' && pathname.startsWith(link.href))
+            const active = isActiveRoute(pathname, link.href)
             return (
-              <Link key={link.href} href={link.href} className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'}`}>
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? 'page' : undefined}
+                onClick={(event) => event.currentTarget.blur()}
+                className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#07111f] ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'}`}
+              >
                 <Icon className={`h-[18px] w-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-blue-300'}`} />
                 <span className="flex-1">{link.label}</span>
                 {link.badge ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{link.badge}</span> : null}

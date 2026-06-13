@@ -2,10 +2,22 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, CloudSun, Droplets, Eye, Gauge, Loader2, MapPinned, Plane, Radar, Wind } from "lucide-react";
+import { AlertCircle, Bell, BellOff, CloudSun, Droplets, Eye, Gauge, Loader2, MapPinned, Plane, Radar, Wind } from "lucide-react";
 import FlightMap, { type Flight, type MapWeather } from "@/app/components/FlightMap";
+import { useRealtimeFlights } from "@/app/hooks/use-realtime-flights";
 import api from "@/lib/axios";
-import { mapRealtimeFlight, type BackendAirport, type RealtimeFlight } from "@/lib/skytrack-data";
+import {
+  extractSubscribedFlightIds,
+  normalizeFlightIdentifier,
+  numericFlightId,
+} from "@/lib/flight-subscriptions";
+import {
+  mapBackendFlight,
+  mapRealtimeFlight,
+  type BackendAirport,
+  type BackendFlight,
+  type FlightCard,
+} from "@/lib/skytrack-data";
 
 function findFlight(flights: Flight[], query: string) {
   const normalizedQuery = query.trim().replace(/\s+/g, "").toUpperCase();
@@ -21,6 +33,8 @@ function findFlight(flights: Flight[], query: string) {
 interface WeatherApiResponse {
   error?: string;
   name?: string;
+  provider?: string;
+  observedAt?: string | null;
   main?: { temp?: number; feels_like?: number; humidity?: number };
   weather?: Array<{ description?: string }>;
   wind?: { speed?: number };
@@ -33,25 +47,40 @@ interface ManagedAirport {
   name: string;
   city: string;
   country: string;
+  latitude: number;
+  longitude: number;
 }
 
 function UserLiveMapContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialFlight = searchParams.get("flight") ?? "";
+  const {
+    flights: realtimeFlights,
+    status: trafficStatus,
+    loading,
+    error: trafficError,
+    fetchedAt,
+  } = useRealtimeFlights();
+  const flights = useMemo(
+    () => realtimeFlights.map(mapRealtimeFlight).filter(Boolean) as Flight[],
+    [realtimeFlights],
+  );
 
-  const [flights, setFlights] = useState<Flight[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
   const [searchTerm, setSearchTerm] = useState(initialFlight);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [weatherVisible, setWeatherVisible] = useState(false);
   const [weatherUpdated, setWeatherUpdated] = useState<Date | null>(null);
+  const [weatherObservedAt, setWeatherObservedAt] = useState<Date | null>(null);
   const [airports, setAirports] = useState<ManagedAirport[]>([]);
   const [selectedAirportId, setSelectedAirportId] = useState("");
   const [airportsLoading, setAirportsLoading] = useState(true);
   const [airportsError, setAirportsError] = useState("");
+  const [scheduledFlights, setScheduledFlights] = useState<FlightCard[]>([]);
+  const [subscribedFlightIds, setSubscribedFlightIds] = useState<Set<string>>(new Set());
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState("");
   const [weather, setWeather] = useState<MapWeather>({
     city: "Select an airport",
     temperature: null,
@@ -65,49 +94,43 @@ function UserLiveMapContent() {
   });
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadFlights() {
-      try {
-        const res = await api.get("/api/realtime-flights");
-        const nextFlights = Array.isArray(res.data)
-          ? (res.data.map((flight: RealtimeFlight) => mapRealtimeFlight(flight)).filter(Boolean) as Flight[])
-          : [];
-
-        if (!mounted) return;
-
-        setFlights(nextFlights);
-        setLastUpdated(new Date());
-
-        const selectedFromUrl = initialFlight ? findFlight(nextFlights, initialFlight) : null;
-        if (selectedFromUrl) {
-          setSelectedFlight(selectedFromUrl);
-          setMessage(null);
-        } else if (initialFlight) {
-          setSelectedFlight(null);
-          setMessage(`Flight ${initialFlight.toUpperCase()} is not visible in current traffic.`);
-        } else if (nextFlights.length > 0) {
-          setSelectedFlight((current) => current ?? nextFlights[0]);
-        }
-      } catch {
-        if (mounted) {
-          setFlights([]);
-          setSelectedFlight(null);
-          setMessage("Cannot connect to realtime flight API. Please check the backend on port 8080.");
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
+    const selectedFromUrl = initialFlight ? findFlight(flights, initialFlight) : null;
+    if (selectedFromUrl) {
+      setSelectedFlight(selectedFromUrl);
+      setMessage(null);
+      return;
     }
 
-    loadFlights();
-    const interval = window.setInterval(loadFlights, 60000);
+    if (initialFlight && !loading) {
+      setSelectedFlight(null);
+      setMessage(`Flight ${initialFlight.toUpperCase()} is not visible in current traffic.`);
+      return;
+    }
 
+    if (!initialFlight && flights.length > 0) {
+      setSelectedFlight((current) => flights.find((flight) => flight.id === current?.id) ?? flights[0]);
+    }
+  }, [flights, initialFlight, loading]);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([api.get<BackendFlight[]>("/api/flights"), api.get("/api/subscriptions/me")])
+      .then(([flightsResponse, subscriptionsResponse]) => {
+        if (!mounted) return;
+        setScheduledFlights(
+          Array.isArray(flightsResponse.data) ? flightsResponse.data.map(mapBackendFlight) : [],
+        );
+        setSubscribedFlightIds(extractSubscribedFlightIds(subscriptionsResponse.data));
+      })
+      .catch((requestError) => {
+        if (mounted) {
+          setSubscriptionError(requestError instanceof Error ? requestError.message : "Cannot load followed flights.");
+        }
+      });
     return () => {
       mounted = false;
-      window.clearInterval(interval);
     };
-  }, [initialFlight]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -117,19 +140,25 @@ function UserLiveMapContent() {
         const response = await api.get("/api/airports");
         const nextAirports = Array.isArray(response.data)
           ? (response.data as BackendAirport[])
-              .filter((airport) => Boolean(airport.city?.trim()))
+              .filter((airport) =>
+                Boolean(airport.city?.trim()) &&
+                typeof airport.latitude === "number" &&
+                typeof airport.longitude === "number",
+              )
               .map((airport) => ({
                 id: String(airport.id ?? airport.code ?? airport.city),
                 code: airport.code?.trim() || "N/A",
                 name: airport.name?.trim() || "Unknown airport",
                 city: airport.city?.trim() || "",
                 country: airport.country?.trim() || "Vietnam",
+                latitude: airport.latitude as number,
+                longitude: airport.longitude as number,
               }))
           : [];
         if (!mounted) return;
         setAirports(nextAirports);
         setSelectedAirportId((current) => current || nextAirports[0]?.id || "");
-        setAirportsError(nextAirports.length === 0 ? "No managed airports have a city configured." : "");
+        setAirportsError(nextAirports.length === 0 ? "No managed airports have valid coordinates configured." : "");
       } catch (airportError: unknown) {
         if (!mounted) return;
         setAirports([]);
@@ -150,6 +179,20 @@ function UserLiveMapContent() {
     [airports, selectedAirportId],
   );
 
+  const selectedScheduledFlight = useMemo(() => {
+    if (!selectedFlight) return null;
+    const selectedCode = normalizeFlightIdentifier(selectedFlight.flightNumber);
+    return scheduledFlights.find(
+      (flight) => normalizeFlightIdentifier(flight.flightNo) === selectedCode,
+    ) ?? null;
+  }, [scheduledFlights, selectedFlight]);
+
+  const selectedScheduledFlightId = selectedScheduledFlight
+    ? numericFlightId(selectedScheduledFlight)
+    : null;
+  const selectedFlightIsFollowed = selectedScheduledFlightId !== null
+    && subscribedFlightIds.has(String(selectedScheduledFlightId));
+
   useEffect(() => {
     if (!selectedAirport) {
       setWeather((current) => ({
@@ -167,10 +210,14 @@ function UserLiveMapContent() {
     async function loadWeather() {
       setWeather((current) => ({ ...current, city: airport.city, loading: true, error: "" }));
       try {
-        const response = await api.get(`/api/weather/${encodeURIComponent(airport.city)}`);
-        const data = (response.data ?? {}) as WeatherApiResponse;
+        const params = new URLSearchParams({
+          latitude: String(airport.latitude),
+          longitude: String(airport.longitude),
+        });
+        const response = await fetch(`/api/weather?${params}`);
+        const data = (await response.json()) as WeatherApiResponse;
         if (!mounted) return;
-        if (data.error) throw new Error(data.error);
+        if (!response.ok || data.error) throw new Error(data.error || "Cannot load airport weather.");
         setWeather({
           city: data.name || airport.city,
           temperature: typeof data.main?.temp === "number" ? data.main.temp : null,
@@ -183,6 +230,7 @@ function UserLiveMapContent() {
           error: "",
         });
         setWeatherUpdated(new Date());
+        setWeatherObservedAt(data.observedAt ? new Date(data.observedAt) : null);
       } catch (weatherError: unknown) {
         if (!mounted) return;
         setWeather((current) => ({
@@ -194,7 +242,7 @@ function UserLiveMapContent() {
     }
 
     void loadWeather();
-    const interval = window.setInterval(loadWeather, 10 * 60 * 1000);
+    const interval = window.setInterval(loadWeather, 5 * 60 * 1000);
     return () => {
       mounted = false;
       window.clearInterval(interval);
@@ -225,6 +273,30 @@ function UserLiveMapContent() {
     } else {
       setSelectedFlight(null);
       setMessage(`Flight ${query.toUpperCase()} is not visible in current traffic.`);
+    }
+  }
+
+  async function toggleSelectedFlightFollow() {
+    if (selectedScheduledFlightId === null) return;
+    setSubscriptionBusy(true);
+    setSubscriptionError("");
+    try {
+      if (selectedFlightIsFollowed) {
+        await api.delete(`/api/subscriptions/me/${selectedScheduledFlightId}`);
+      } else {
+        await api.post(`/api/subscriptions/me/${selectedScheduledFlightId}`);
+      }
+      setSubscribedFlightIds((current) => {
+        const next = new Set(current);
+        const id = String(selectedScheduledFlightId);
+        if (selectedFlightIsFollowed) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } catch (requestError) {
+      setSubscriptionError(requestError instanceof Error ? requestError.message : "Could not update followed flight.");
+    } finally {
+      setSubscriptionBusy(false);
     }
   }
 
@@ -269,9 +341,26 @@ function UserLiveMapContent() {
           {message}
         </div>
       )}
+      {trafficError && (
+        <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {trafficError}
+        </div>
+      )}
+      {trafficStatus?.stale && (
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>
+            {trafficStatus.message}
+            {trafficStatus.lastSuccessfulUpdate && (
+              <> Last successful update: {new Date(trafficStatus.lastSuccessfulUpdate).toLocaleString()}.</>
+            )}
+          </span>
+        </div>
+      )}
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[#0b101d] shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
+      <section className="grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="self-start overflow-hidden rounded-[2rem] border border-slate-200 bg-[#0b101d] shadow-[0_24px_70px_rgba(15,23,42,0.28)]">
           <div className="relative h-[72vh] min-h-[620px]">
             {loading && (
               <div className="absolute inset-0 z-[1100] flex items-center justify-center bg-[#070b13]/70 text-white">
@@ -326,6 +415,26 @@ function UserLiveMapContent() {
                     <div className="mt-1 text-sm font-semibold text-slate-950">{selectedFlight.speed.toLocaleString()} km/h</div>
                   </div>
                 </div>
+                {selectedScheduledFlight ? (
+                  <button
+                    type="button"
+                    onClick={() => void toggleSelectedFlightFollow()}
+                    disabled={subscriptionBusy || selectedScheduledFlightId === null}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-wait disabled:opacity-60 ${selectedFlightIsFollowed ? "border border-slate-200 bg-white text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600" : "bg-blue-600 text-white hover:bg-blue-500"}`}
+                  >
+                    {subscriptionBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedFlightIsFollowed ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                    {selectedFlightIsFollowed ? "Unfollow this flight" : "Follow this flight"}
+                  </button>
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                    This OpenSky callsign does not match a scheduled flight in the SkyTrack database, so it cannot be followed yet.
+                  </div>
+                )}
+                {subscriptionError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
+                    {subscriptionError}
+                  </div>
+                )}
               </div>
             ) : (
               <p className="mt-3 text-sm leading-6 text-slate-500">Select a marker to inspect it here.</p>
@@ -390,7 +499,11 @@ function UserLiveMapContent() {
               </label>
               {airportsError && <p className="mt-2 text-xs leading-5 text-rose-600">{airportsError}</p>}
               <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
-                <span>Updated {weatherUpdated?.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) ?? "--:--"}</span>
+                <span>
+                  OpenWeather · {weatherObservedAt?.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                    ?? weatherUpdated?.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                    ?? "--:--"}
+                </span>
                 <span>{weatherVisible ? "Visible on map" : "Enable Weather on map"}</span>
               </div>
             </div>
@@ -400,10 +513,18 @@ function UserLiveMapContent() {
             <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Auto refresh</div>
             <div className="mt-2 text-2xl font-semibold text-slate-950">60 seconds</div>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Data is refetched on an interval so the live map stays current without forcing a full page reload.
+              All live-map widgets share one refresh request, reducing OpenSky quota usage while keeping the latest available snapshot visible.
             </p>
-            <div className="mt-4 text-xs text-slate-400">
-              Last updated: {lastUpdated?.toLocaleTimeString("en-GB") ?? "--:--"}
+            <div className="mt-4 space-y-1 text-xs text-slate-400">
+              <div>
+                Source updated: {trafficStatus?.lastSuccessfulUpdate
+                  ? new Date(trafficStatus.lastSuccessfulUpdate).toLocaleString()
+                  : "--"}
+              </div>
+              <div>Checked by browser: {fetchedAt?.toLocaleTimeString("en-GB") ?? "--:--"}</div>
+              {trafficStatus?.nextRefreshAllowedAt && (
+                <div>Next source retry: {new Date(trafficStatus.nextRefreshAllowedAt).toLocaleString()}</div>
+              )}
             </div>
           </div>
         </aside>

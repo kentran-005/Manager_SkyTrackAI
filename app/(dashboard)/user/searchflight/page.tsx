@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowRight,
+  Bell,
+  BellOff,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +19,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import api from '@/lib/axios'
+import { extractSubscribedFlightIds, numericFlightId } from '@/lib/flight-subscriptions'
 import { getAirlineColor, mapBackendFlight, type BackendFlight, type FlightCard } from '@/lib/skytrack-data'
 
 const PAGE_SIZE = 8
@@ -49,6 +52,9 @@ export default function SearchFlightPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [subscriptionError, setSubscriptionError] = useState('')
+  const [subscribedFlightIds, setSubscribedFlightIds] = useState<Set<string>>(new Set())
+  const [subscriptionBusyId, setSubscriptionBusyId] = useState<string | null>(null)
 
   async function requestFlights(query = '') {
     const currentRequest = ++requestId.current
@@ -74,6 +80,9 @@ export default function SearchFlightPage() {
 
   useEffect(() => {
     void requestFlights()
+    api.get('/api/subscriptions/me')
+      .then((response) => setSubscribedFlightIds(extractSubscribedFlightIds(response.data)))
+      .catch((requestError) => setSubscriptionError(requestError instanceof Error ? requestError.message : 'Unable to load followed flights.'))
     return () => { requestId.current += 1 }
   }, [])
 
@@ -107,6 +116,36 @@ export default function SearchFlightPage() {
     setAirport('All airports')
     setStatus('All statuses')
     void requestFlights()
+  }
+
+  async function toggleFollow(flight: FlightCard) {
+    const flightId = numericFlightId(flight)
+    if (!flightId) {
+      setSubscriptionError('This flight does not have a valid backend ID.')
+      return
+    }
+
+    const id = String(flightId)
+    const following = subscribedFlightIds.has(id)
+    setSubscriptionBusyId(id)
+    setSubscriptionError('')
+    try {
+      if (following) {
+        await api.delete(`/api/subscriptions/me/${flightId}`)
+      } else {
+        await api.post(`/api/subscriptions/me/${flightId}`)
+      }
+      setSubscribedFlightIds((current) => {
+        const next = new Set(current)
+        if (following) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    } catch (requestError) {
+      setSubscriptionError(requestError instanceof Error ? requestError.message : 'Could not update followed flight.')
+    } finally {
+      setSubscriptionBusyId(null)
+    }
   }
 
   return (
@@ -188,6 +227,12 @@ export default function SearchFlightPage() {
             <div><div className="font-semibold">Could not load flights</div><div className="mt-1 text-rose-700">{error}</div><button type="button" onClick={() => void requestFlights(activeQuery)} className="mt-2 font-semibold underline">Try again</button></div>
           </div>
         )}
+        {subscriptionError && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <Bell className="mt-0.5 h-5 w-5 shrink-0" />
+            <div><div className="font-semibold">Follow status unavailable</div><div className="mt-1">{subscriptionError}</div></div>
+          </div>
+        )}
 
         <div className="mt-5 flex items-center justify-between">
           <div><h2 className="font-semibold text-slate-950">{activeQuery ? `Results for “${activeQuery}”` : 'All flights'}</h2><p className="mt-1 text-xs text-slate-500">{filteredFlights.length} matching record{filteredFlights.length === 1 ? '' : 's'}</p></div>
@@ -198,12 +243,16 @@ export default function SearchFlightPage() {
           <div className="mt-4 space-y-3">{[0, 1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}</div>
         ) : visibleFlights.length > 0 ? (
           <div className="mt-4 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
-            <div className="hidden grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_.5fr] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 lg:grid">
-              <span>Flight</span><span>Route</span><span>Schedule</span><span>Status</span><span />
+            <div className="hidden grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_1.15fr] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 lg:grid">
+              <span>Flight</span><span>Route</span><span>Schedule</span><span>Status</span><span>Actions</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {visibleFlights.map((flight) => (
-                <article key={flight.id} className="grid gap-4 p-5 transition hover:bg-blue-50/30 lg:grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_.5fr] lg:items-center">
+              {visibleFlights.map((flight) => {
+                const backendId = numericFlightId(flight)
+                const following = backendId !== null && subscribedFlightIds.has(String(backendId))
+                const busy = backendId !== null && subscriptionBusyId === String(backendId)
+                return (
+                <article key={flight.id} className="grid gap-4 p-5 transition hover:bg-blue-50/30 lg:grid-cols-[1.2fr_1.6fr_1.2fr_.8fr_1.15fr] lg:items-center">
                   <div className="flex items-center gap-3">
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xs font-bold text-white" style={{ backgroundColor: getAirlineColor(flight.airlineCode) }}>{flight.airlineCode || 'ST'}</span>
                     <div className="min-w-0"><div className="font-mono font-bold text-slate-950">{flight.flightNo}</div><div className="truncate text-xs text-slate-500">{flight.airline}</div><div className="mt-0.5 text-[10px] text-slate-400">{flight.aircraft}</div></div>
@@ -218,9 +267,20 @@ export default function SearchFlightPage() {
                     <div><div className="text-[10px] uppercase tracking-wider text-slate-400">Arrival</div><div className="mt-1 text-sm font-semibold">{flight.to.time}</div><div className="text-[10px] text-slate-400">{flight.duration}</div></div>
                   </div>
                   <div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${statusClass(flight.status)}`}>{flight.status}</span></div>
-                  <button type="button" onClick={() => router.push('/user/live-map')} className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-500">Map <ArrowRight className="h-3.5 w-3.5" /></button>
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void toggleFollow(flight)}
+                      disabled={backendId === null || busy}
+                      className={`inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${following ? 'border border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
+                    >
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : following ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                      {following ? 'Unfollow' : 'Follow'}
+                    </button>
+                    <button type="button" onClick={() => router.push(`/user/live-map?flight=${encodeURIComponent(flight.flightNo)}`)} className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-500">Map <ArrowRight className="h-3.5 w-3.5" /></button>
+                  </div>
                 </article>
-              ))}
+              )})}
             </div>
           </div>
         ) : !error && (

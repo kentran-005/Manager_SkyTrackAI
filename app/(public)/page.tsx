@@ -13,8 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import api from '@/lib/axios'
-import type { RealtimeFlight } from '@/lib/skytrack-data'
+import { useRealtimeFlights } from '@/app/hooks/use-realtime-flights'
 
 interface WeatherData {
   name?: string
@@ -25,24 +24,25 @@ interface WeatherData {
 export default function SkyTrackLanding() {
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const [flights, setFlights] = useState<RealtimeFlight[]>([])
   const [weather, setWeather] = useState<WeatherData | null>(null)
+  const { flights, status: trafficStatus } = useRealtimeFlights()
 
   useEffect(() => {
     let mounted = true
 
-    async function loadOverview() {
-      const [flightResult, weatherResult] = await Promise.allSettled([
-        api.get('/api/realtime-flights'),
-        api.get('/api/weather/Hanoi'),
-      ])
-      if (!mounted) return
-      if (flightResult.status === 'fulfilled' && Array.isArray(flightResult.value.data)) setFlights(flightResult.value.data)
-      if (weatherResult.status === 'fulfilled') setWeather(weatherResult.value.data)
+    async function loadWeather() {
+      try {
+        const params = new URLSearchParams({ latitude: '21.2213', longitude: '105.808' })
+        const response = await fetch(`/api/weather?${params}`)
+        const data = await response.json()
+        if (mounted && response.ok) setWeather(data)
+      } catch {
+        // The weather tile remains unavailable while the rest of the landing page keeps working.
+      }
     }
 
-    loadOverview()
-    const interval = window.setInterval(loadOverview, 60000)
+    loadWeather()
+    const interval = window.setInterval(loadWeather, 5 * 60 * 1000)
     return () => {
       mounted = false
       window.clearInterval(interval)
@@ -75,8 +75,8 @@ export default function SkyTrackLanding() {
         <div className="relative mx-auto grid min-h-[670px] max-w-7xl items-center gap-12 px-5 py-20 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1.5 text-xs font-semibold text-blue-200">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              Vietnam airspace is live
+              <span className={`h-1.5 w-1.5 rounded-full ${trafficStatus?.stale ? 'bg-amber-400' : 'animate-pulse bg-emerald-400'}`} />
+              {trafficStatus?.stale ? 'Showing cached airspace data' : 'Vietnam airspace is live'}
             </div>
             <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[0.98] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
               See every journey.<br /><span className="text-blue-400">Understand the sky.</span>
@@ -108,7 +108,12 @@ export default function SkyTrackLanding() {
             <div className="ml-auto w-[390px] rounded-[32px] border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-black/40 backdrop-blur-xl">
               <div className="flex items-center justify-between px-2 py-1">
                 <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Live snapshot</div><div className="mt-1 text-sm font-semibold">Vietnam FIR</div></div>
-                <Radar className="h-6 w-6 text-blue-400" />
+                <div className="text-right">
+                  <Radar className={`ml-auto h-6 w-6 ${trafficStatus?.stale ? 'text-amber-400' : 'text-blue-400'}`} />
+                  <div className={`mt-1 text-[9px] font-bold uppercase tracking-wider ${trafficStatus?.stale ? 'text-amber-300' : 'text-emerald-300'}`}>
+                    {trafficStatus?.stale ? 'Cached' : 'Live'}
+                  </div>
+                </div>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {[
@@ -124,12 +129,20 @@ export default function SkyTrackLanding() {
                   <div key={flight.icao24 || `${flight.callsign}-${index}`} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-white/[0.05]">
                     <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-500/15 text-blue-300"><Plane className="h-4 w-4 -rotate-12" fill="currentColor" /></span>
                     <div className="min-w-0 flex-1"><div className="truncate font-mono text-sm font-bold">{flight.callsign?.trim() || flight.icao24 || 'Unknown'}</div><div className="truncate text-[11px] text-slate-500">{flight.originCountry || 'Live OpenSky traffic'}</div></div>
-                    <span className={`h-2 w-2 rounded-full ${flight.onGround ? 'bg-slate-500' : 'bg-emerald-400'}`} />
+                    <span className={`h-2 w-2 rounded-full ${trafficStatus?.stale ? 'bg-amber-400' : flight.onGround ? 'bg-slate-500' : 'bg-emerald-400'}`} />
                   </div>
                 )) : (
                   <div className="grid h-52 place-items-center text-center text-xs text-slate-500">Waiting for live traffic data...</div>
                 )}
               </div>
+              {trafficStatus?.stale && (
+                <div className="mx-2 mt-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.08] px-3 py-2 text-[10px] leading-4 text-amber-100">
+                  {trafficStatus.message}
+                  {trafficStatus.lastSuccessfulUpdate && (
+                    <span> Last update: {new Date(trafficStatus.lastSuccessfulUpdate).toLocaleString()}.</span>
+                  )}
+                </div>
+              )}
               <Link href="/live-map" className="mt-3 flex items-center justify-between rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500">
                 Open full live map <ArrowRight className="h-4 w-4" />
               </Link>

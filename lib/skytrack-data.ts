@@ -30,6 +30,15 @@ export interface RealtimeFlight {
   onGround?: boolean;
 }
 
+export interface RealtimeFlightStatus {
+  live: boolean;
+  stale: boolean;
+  aircraftCount: number;
+  lastSuccessfulUpdate?: string | null;
+  nextRefreshAllowedAt?: string | null;
+  message: string;
+}
+
 export interface BackendAirport {
   id?: number;
   code?: string;
@@ -252,4 +261,3 @@ export function mapBackendAirport(airport: BackendAirport): AirportCard {
     longitude: airport.longitude,
   };
 }
-

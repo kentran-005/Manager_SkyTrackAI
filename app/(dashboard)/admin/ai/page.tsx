@@ -5,8 +5,6 @@ import {
   Bot,
   Send,
   Sparkles,
-  Plane,
-  Clock,
   MapPin,
   TrendingUp,
   AlertTriangle,
@@ -20,6 +18,7 @@ import {
   Download,
   RefreshCw,
 } from "lucide-react";
+import { askAviationAssistant } from "@/lib/aviation-ai";
 
 // ── Types ──
 interface Message {
@@ -58,55 +57,38 @@ const initialMessages: Message[] = [
   },
 ];
 
-// ── Simulate admin-specific responses ──
-function simulateAdminResponse(userMessage: string): string {
-  const msg = userMessage.toLowerCase();
-
-  if (msg.includes("daily") || msg.includes("summary") || msg.includes("report")) {
-    return "**Daily Flight Operations Summary — 01/06/2026**\n\n📊 Overview\n• Total flights tracked: **1,540**\n• On-time departures: **1,441** (93.6%)\n• Delayed flights: **87** (5.7%)\n• Cancelled flights: **12** (0.8%)\n\n✈ Top Performing Routes\n1. SGN ↔ HAN — 156 flights, 96.2% on-time\n2. SGN ↔ DAD — 98 flights, 94.1% on-time\n3. HAN ↔ PQC — 72 flights, 92.3% on-time\n\n⚠ Notable Issues\n• Tan Son Nhat (SGN): Air traffic congestion caused average 18-min delays in morning peak\n• Noi Bai (HAN): Runway maintenance scheduled for 02:00–04:00 tonight\n\nWould you like a breakdown by airline or time slot?";
-  }
-  if (msg.includes("delay") || msg.includes("route")) {
-    return "**Delay Analysis — Top Routes by Delay Rate (Last 7 Days)**\n\n🔴 High Delay Rate (>10%)\n• SGN → HAN: **13.2%** avg delay (main cause: air traffic)\n• HAN → SGN: **11.8%** avg delay (weather impact: 3 days)\n\n🟡 Moderate Delay Rate (5–10%)\n• SGN → DAD: **8.7%** avg delay\n• HAN → DAD: **7.2%** avg delay\n• SGN → CXR: **6.5%** avg delay\n\n🟢 Low Delay Rate (<5%)\n• HAN → PQC: **3.1%** avg delay\n• DAD → SGN: **2.8%** avg delay\n\n💡 Recommendation: Consider increasing buffer time for SGN–HAN slots during peak hours (07:00–09:00, 17:00–19:00).";
-  }
-  if (msg.includes("passenger") || msg.includes("traffic")) {
-    return "**Passenger Statistics — June 2026**\n\n👥 Total Passengers: **3,842,150**\n• Domestic: 2,914,300 (75.8%)\n• International: 927,850 (24.2%)\n\n📈 Month-over-Month Growth: +8.4%\n\n🏆 Busiest Airports\n1. SGN (Tan Son Nhat) — 1,847,200 pax\n2. HAN (Noi Bai) — 1,294,600 pax\n3. DAD (Da Nang) — 432,100 pax\n4. CXR (Cam Ranh) — 187,400 pax\n5. PQC (Phu Quoc) — 80,850 pax\n\n✈ Top Airlines by Passenger Volume\n1. Vietnam Airlines — 42%\n2. VietJet Air — 28%\n3. Bamboo Airways — 18%\n4. Pacific Airlines — 7%\n5. Others — 5%";
-  }
-  if (msg.includes("performance") || msg.includes("airline")) {
-    return "**Airline On-Time Performance Analysis**\n\n🏅 Rankings (On-Time Rate)\n\n1. **Vietnam Airlines** — 91.4% ⬆ +2.1%\n   Flights: 8,240 | Delayed: 708 | Avg delay: 12 min\n\n2. **Bamboo Airways** — 89.7% ⬆ +0.8%\n   Flights: 3,640 | Delayed: 375 | Avg delay: 15 min\n\n3. **Pacific Airlines** — 85.2% ⬇ -1.3%\n   Flights: 1,420 | Delayed: 210 | Avg delay: 22 min\n\n4. **VietJet Air** — 82.0% ⬇ -0.5%\n   Flights: 5,680 | Delayed: 1,022 | Avg delay: 28 min\n\n💡 VietJet Air remains the most delayed carrier. Root cause analysis suggests high turnaround utilization rate (94%) leaving minimal buffer for recovery.";
-  }
-  if (msg.includes("airport") || msg.includes("status")) {
-    return "**Airport Status — Real-time Overview**\n\n🟢 **SGN — Tan Son Nhat Intl** — Operational\n• Active runways: 2/2\n• Current weather: 32°C, Clear\n• Congestion level: High (peak hours)\n• Delay index: 13.2%\n\n🟢 **HAN — Noi Bai Intl** — Operational\n• Active runways: 2/2\n• Current weather: 29°C, Partly Cloudy\n• Congestion level: Medium\n• Delay index: 8.7%\n\n🟢 **DAD — Da Nang Intl** — Operational\n• Active runways: 1/1\n• Current weather: 34°C, Sunny\n• Congestion level: Low\n• Delay index: 6.1%\n\n🟡 **CXR — Cam Ranh Intl** — Minor Advisory\n• Crosswind advisory in effect (gusts 25 kt)\n• Delay index: 4.3%\n\n🟢 **PQC — Phu Quoc Intl** — Operational\n• Normal operations\n• Delay index: 3.2%";
-  }
-  if (msg.includes("alert") || msg.includes("anomal") || msg.includes("system")) {
-    return "**System Health Check — All Services Operational**\n\n✅ No critical alerts at this time.\n\n📋 Active Advisories\n• ⚠ SGN airport congestion above normal threshold (13.2% delay rate)\n• ⚠ CXR crosswind advisory active until 18:00 local time\n• ℹ HAN runway maintenance scheduled tonight 02:00–04:00\n\n🖥 System Status\n• API Gateway: ✅ Online (99.98% uptime)\n• Flight Data Feed: ✅ Connected — last sync 2 min ago\n• Weather Service: ✅ Connected\n• Database: ✅ MySQL 8.0 — healthy\n• AI Service (Gemini): ✅ Connected\n\n📊 Resource Usage\n• CPU: 42% | RAM: 58% | Storage: 65% | Disk: 48%\n\nAll systems nominal. No intervention required.";
-  }
-  return `I understand your query: **"${userMessage}"**\n\nAs the Admin AI assistant, I can generate:\n• Operations summaries & daily reports\n• Delay and route performance analysis\n• Passenger traffic statistics\n• Airline on-time rankings\n• Airport status overviews\n• System health checks\n\nTry one of the quick prompts above or ask me anything about flight operations!`;
-}
-
 // ── Render markdown-like content ──
 function MessageContent({ content }: { content: string }) {
   const lines = content.split("\n");
+
+  const renderInline = (text: string) =>
+    text.split(/(\*\*.*?\*\*)/g).map((part, index) =>
+      part.startsWith("**") && part.endsWith("**") ? (
+        <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>
+      ) : (
+        part
+      ),
+    );
+
   return (
     <div className="space-y-0.5">
       {lines.map((line, i) => {
-        // Bold **text**
-        const formatted = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
         if (line.startsWith("•") || line.startsWith("-")) {
           return (
             <p key={i} className="flex gap-1.5 text-sm leading-relaxed">
               <span className="flex-shrink-0 mt-0.5 text-blue-400">•</span>
-              <span dangerouslySetInnerHTML={{ __html: formatted.replace(/^[•\-]\s*/, "") }} />
+              <span>{renderInline(line.replace(/^[•-]\s*/, ""))}</span>
             </p>
           );
         }
         if (line.match(/^\d+\.\s/)) {
           return (
-            <p key={i} className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formatted }} />
+            <p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>
           );
         }
         if (line === "") return <div key={i} className="h-1" />;
         return (
-          <p key={i} className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formatted }} />
+          <p key={i} className="text-sm leading-relaxed">{renderInline(line)}</p>
         );
       })}
     </div>
@@ -118,6 +100,7 @@ export default function AdminAIPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -128,9 +111,10 @@ export default function AdminAIPage() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const handleSend = (text?: string) => {
+  const handleSend = async (text?: string) => {
     const messageText = text || input;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || isTyping) return;
+    const history = messages.map(({ role, content }) => ({ role, content }));
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -142,9 +126,10 @@ export default function AdminAIPage() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
+    setError("");
 
-    setTimeout(() => {
-      const response = simulateAdminResponse(messageText);
+    try {
+      const response = await askAviationAssistant(messageText, history, "admin");
       setMessages((prev) => [
         ...prev,
         {
@@ -154,20 +139,37 @@ export default function AdminAIPage() {
           time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "AI service is temporarily unavailable.");
+    } finally {
       setIsTyping(false);
-    }, 1600);
+    }
   };
 
   const handleReset = () => {
     setMessages(initialMessages);
     setInput("");
+    setIsTyping(false);
+    setError("");
+  };
+
+  const handleExport = () => {
+    const transcript = messages
+      .map((message) => `[${message.time}] ${message.role.toUpperCase()}\n${message.content}`)
+      .join("\n\n");
+    const url = URL.createObjectURL(new Blob([transcript], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `skytrack-admin-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <main className="p-8 bg-slate-50 min-h-screen font-sans text-slate-800 antialiased flex flex-col">
+    <main className="flex h-[calc(100vh-72px)] min-h-[680px] flex-col overflow-hidden bg-slate-50 p-4 font-sans text-slate-800 antialiased sm:p-6 lg:p-8">
 
       {/* ── PAGE HEADER ── */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
             <Bot className="w-5 h-5 text-purple-600" />
@@ -184,16 +186,19 @@ export default function AdminAIPage() {
           >
             <RotateCcw size={14} /> Reset
           </button>
-          <button className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+          >
             <Download size={14} /> Export Chat
           </button>
         </div>
       </div>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
 
         {/* ── QUICK PROMPTS SIDEBAR ── */}
-        <aside className="w-52 flex-shrink-0">
+        <aside className="w-full flex-shrink-0 lg:w-52">
           <div className="bg-white border border-slate-100 rounded-2xl shadow-xs overflow-hidden sticky top-6">
             <div className="px-4 py-3.5 border-b border-slate-100 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-500" />
@@ -225,12 +230,12 @@ export default function AdminAIPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Model</span>
-                  <span className="text-xs font-semibold text-purple-600">Gemini 2.5</span>
+                  <span className="text-xs font-semibold text-purple-600">Gemini</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Status</span>
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Online
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold ${error ? "text-rose-600" : "text-emerald-600"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-rose-500" : "bg-emerald-500"}`} /> {error ? "Error" : "Ready"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -253,16 +258,16 @@ export default function AdminAIPage() {
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-800">SkyTrack AI Assistant</p>
-                <p className="text-xs text-slate-400">Powered by Gemini 2.5 Flash · Admin Mode</p>
+                <p className="text-xs text-slate-400">Gemini with live SkyTrack context · Admin mode</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                Live
+              <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-rose-500" : "bg-emerald-500"}`} />
+                {error ? "Unavailable" : "API ready"}
               </span>
               <button
-                onClick={() => setMessages(initialMessages)}
+                onClick={handleReset}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
                 title="Refresh"
               >
@@ -272,7 +277,7 @@ export default function AdminAIPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(100vh - 340px)" }}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -330,6 +335,12 @@ export default function AdminAIPage() {
                 </div>
               </div>
             )}
+            {error && (
+              <div className="ml-11 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                <div className="font-semibold">Could not get an AI response</div>
+                <div className="mt-1">{error}</div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -360,7 +371,7 @@ export default function AdminAIPage() {
               </button>
             </div>
             <p className="text-xs text-slate-300 mt-2 text-center">
-              SkyTrack AI · Admin Mode · Powered by Gemini 2.5 Flash
+              Answers use available SkyTrack flights, airports, live traffic and weather data
             </p>
           </div>
         </div>

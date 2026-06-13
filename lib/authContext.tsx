@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 interface AuthContextType {
   user: any;
   login: (token: string, userData: any) => void;
+  updateSession: (userData: any, token?: string) => void;
   logout: () => void;
   isLoading: boolean;
 }
@@ -33,6 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
   };
 
+  const updateSession = (userData: any, token?: string) => {
+    if (token) localStorage.setItem("skytrack_token", token);
+    localStorage.setItem("skytrack_user", JSON.stringify(userData));
+    setUser(userData);
+  };
+
   const logout = () => {
     localStorage.removeItem("skytrack_token");
     localStorage.removeItem("skytrack_user");
@@ -41,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, updateSession, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
