@@ -92,6 +92,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isAdminRoute = pathname.startsWith("/admin");
   const links = isAdminRoute && user.role === "ADMIN" ? ADMIN_LINKS : USER_LINKS;
   const currentDisplayRole = isAdminRoute && user.role === "ADMIN" ? "ADMIN" : "USER";
+  const dashboardHome = isAdminRoute ? "/admin" : "/user";
 
   return (
     <div className="dash-root">
@@ -104,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ── SIDEBAR ── */}
       <aside className={`dash-sidebar ${sidebarOpen ? "dash-sidebar--open" : ""}`}>
         {/* Logo */}
-        <div className="dash-sidebar-logo">
+        <Link href={dashboardHome} className="dash-sidebar-logo" aria-label="Go to dashboard">
           <div className="dash-sidebar-logo-icon">
             <Plane className="w-5 h-5" />
           </div>
@@ -114,7 +115,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
             <span className="dash-sidebar-logo-sub">Real-time Flight Tracking</span>
           </div>
-        </div>
+        </Link>
 
         {/* Role Badge */}
         <div className="dash-sidebar-role">
@@ -192,12 +193,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="dash-mobile-logo">
+          <Link href={dashboardHome} className="dash-mobile-logo" aria-label="Go to dashboard">
             <Plane className="w-4 h-4 text-blue-500" />
             <span className="dash-mobile-logo-text">
               SkyTrack <span style={{ color: "#60a5fa" }}>AI</span>
             </span>
-          </div>
+          </Link>
           <div className="dash-sidebar-user-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>
             {user.name?.charAt(0).toUpperCase() || "U"}
           </div>
