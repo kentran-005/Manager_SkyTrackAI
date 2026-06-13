@@ -37,7 +37,7 @@ const ADMIN_LINKS: NavLink[] = [
   { icon: Building2, label: "Airports", href: "/admin/airports" },
   { icon: Plane, label: "Airlines", href: "/admin/airlines" },
   { icon: PlaneTakeoff, label: "Flights", href: "/admin/flights" },
-  { icon: Users, label: "Passengers", href: "/admin/passengers" },
+  { icon: Users, label: "Reports", href: "/admin/reports" },
   { icon: UsersRound, label: "Users", href: "/admin/users" },
   { icon: Bot, label: "AI Summary", href: "/admin/ai" },
   { icon: Settings, label: "Settings", href: "/admin/settings" },

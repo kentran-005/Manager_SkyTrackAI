@@ -411,14 +411,14 @@
 /* ── Wrapper ── */
 .pub-footer-wrapper {
   flex-shrink: 0;
-  padding: 0 20px 16px;
+  /* padding: 0 20px 16px; */
   background: transparent;
 }
 
 /* ── Card Shell: deep navy, rounded-3xl ── */
 .pub-footer {
   background: #0a192f;
-  border-radius: 1.5rem;
+  /* border-radius: 1.5rem; */
   overflow: hidden;
   position: relative;
 }
