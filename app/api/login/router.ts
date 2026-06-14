@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       { error: "Sai tài khoản hoặc mật khẩu test (Hãy dùng admin@gmail.com hoặc user@gmail.com)" },
       { status: 401 }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Lỗi hệ thống mock" }, { status: 500 });
   }
 }

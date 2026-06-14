@@ -3,6 +3,7 @@ import type { BackendFlight, FlightCard } from '@/lib/skytrack-data'
 export interface FlightSubscription {
   id: number
   flight?: BackendFlight
+  createdAt?: string
 }
 
 export function extractSubscribedFlightIds(payload: unknown) {

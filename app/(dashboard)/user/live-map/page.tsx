@@ -355,6 +355,9 @@ function UserLiveMapContent() {
             {trafficStatus.lastSuccessfulUpdate && (
               <> Last successful update: {new Date(trafficStatus.lastSuccessfulUpdate).toLocaleString()}.</>
             )}
+            {trafficStatus.authenticationMessage && (
+              <> {trafficStatus.authenticationMessage}</>
+            )}
           </span>
         </div>
       )}
@@ -524,6 +527,12 @@ function UserLiveMapContent() {
               <div>Checked by browser: {fetchedAt?.toLocaleTimeString("en-GB") ?? "--:--"}</div>
               {trafficStatus?.nextRefreshAllowedAt && (
                 <div>Next source retry: {new Date(trafficStatus.nextRefreshAllowedAt).toLocaleString()}</div>
+              )}
+              {trafficStatus?.authenticationMode && (
+                <div>
+                  OpenSky auth: {trafficStatus.authenticationMode}
+                  {trafficStatus.authenticationMessage ? ` · ${trafficStatus.authenticationMessage}` : ""}
+                </div>
               )}
             </div>
           </div>

@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useMemo, useState } from "react";
 import { 
   Search, 
   Plus, 
@@ -6,18 +7,70 @@ import {
   Trash2, 
   ChevronDown 
 } from 'lucide-react';
-
-// Dữ liệu giả lập chuẩn theo ảnh mẫu
-const airlinesData = [
-  { id: 1, code: 'VN', name: 'Vietnam Airlines', logo: '🌾', country: 'Vietnam', status: 'Active' },
-  { id: 2, code: 'VJ', name: 'VietJet Air', logo: '✈️', country: 'Vietnam', status: 'Active' },
-  { id: 3, code: 'QH', name: 'Bamboo Airways', logo: '🎋', country: 'Vietnam', status: 'Active' },
-  { id: 4, code: 'BL', name: 'Pacific Airlines', logo: '🧡', country: 'Vietnam', status: 'Active' },
-  { id: 5, code: 'VAS', name: 'Vietravel Airlines', logo: '💙', country: 'Vietnam', status: 'Inactive' },
-  { id: 6, code: 'JC', name: 'Jetstar Pacific', logo: '⭐', country: 'Vietnam', status: 'Active' },
-];
+import api from "@/lib/axios";
+import type { BackendAirline } from "@/lib/skytrack-data";
 
 export default function AirlinesPage() {
+  const [airlines, setAirlines] = useState<BackendAirline[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadAirlines() {
+    try {
+      const response = await api.get<BackendAirline[]>("/api/airlines");
+      setAirlines(Array.isArray(response.data) ? response.data : []);
+      setError("");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load airlines.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadAirlines();
+  }, []);
+
+  const visibleAirlines = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return airlines.filter((airline) => !query || airline.code?.toLowerCase().includes(query) || airline.name?.toLowerCase().includes(query));
+  }, [airlines, search]);
+
+  async function addAirline() {
+    const code = window.prompt("Airline code");
+    if (!code) return;
+    const name = window.prompt("Airline name");
+    if (!name) return;
+    try {
+      await api.post("/api/airlines", { code: code.trim().toUpperCase(), name: name.trim(), logo: "" });
+      await loadAirlines();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to add airline.");
+    }
+  }
+
+  async function editAirline(airline: BackendAirline) {
+    const name = window.prompt("Airline name", airline.name || "");
+    if (!name || !airline.id) return;
+    try {
+      await api.put(`/api/airlines/${airline.id}`, { ...airline, name: name.trim() });
+      await loadAirlines();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to update airline.");
+    }
+  }
+
+  async function deleteAirline(airline: BackendAirline) {
+    if (!airline.id || !window.confirm(`Delete ${airline.name || airline.code}?`)) return;
+    try {
+      await api.delete(`/api/airlines/${airline.id}`);
+      await loadAirlines();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to delete airline. It may still be used by flights.");
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-[#f8fafc] text-slate-800 font-sans">
       
@@ -32,7 +85,7 @@ export default function AirlinesPage() {
             <h2 className="text-2xl font-bold text-slate-900">Airlines</h2>
             <p className="text-sm text-slate-500 mt-0.5">Manage airlines in the system</p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-colors">
+          <button onClick={() => void addAirline()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-colors">
             <Plus className="w-4 h-4" />
             Add Airline
           </button>
@@ -46,9 +99,12 @@ export default function AirlinesPage() {
           <input
             type="text"
             placeholder="Search airline code, name..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
         </div>
+        {error && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
         {/* Airlines Data Table */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -65,7 +121,7 @@ export default function AirlinesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm font-medium text-slate-700">
-              {airlinesData.map((airline) => (
+              {visibleAirlines.map((airline) => (
                 <tr key={airline.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-4 px-6 text-slate-400 font-normal">{airline.id}</td>
                   <td className="py-4 px-6">
@@ -74,29 +130,28 @@ export default function AirlinesPage() {
                     </span>
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-900">{airline.name}</td>
-                  <td className="py-4 px-6 text-center text-xl">{airline.logo}</td>
-                  <td className="py-4 px-6 text-slate-600">{airline.country}</td>
+                  <td className="py-4 px-6 text-center text-xl">{airline.logo || "✈"}</td>
+                  <td className="py-4 px-6 text-slate-600">Vietnam</td>
                   <td className="py-4 px-6">
                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      airline.status === 'Active' 
-                        ? 'bg-emerald-50 text-emerald-600' 
-                        : 'bg-rose-50 text-rose-600'
+                      'bg-emerald-50 text-emerald-600'
                     }`}>
-                      {airline.status}
+                      Active
                     </span>
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center justify-center gap-3">
-                      <button className="text-slate-400 hover:text-blue-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
+                      <button onClick={() => void editAirline(airline)} className="text-slate-400 hover:text-blue-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button className="text-slate-400 hover:text-rose-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
+                      <button onClick={() => void deleteAirline(airline)} className="text-slate-400 hover:text-rose-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {!loading && visibleAirlines.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-slate-400">No airlines found.</td></tr>}
             </tbody>
           </table>
         </div>

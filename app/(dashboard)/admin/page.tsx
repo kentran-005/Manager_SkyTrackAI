@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowRight, Bot, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
 import api from "@/lib/axios";
+import type { BackendStats } from "@/lib/skytrack-data";
 
 // ── Data ──
 const TREND_DATA = [
@@ -51,27 +50,52 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function AdminDashboard() {
+  const [aiInput, setAiInput] = useState("");
+  const [aiMessages, setAiMessages] = useState<{ q: string; a: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
   // STATE LƯU DỮ LIỆU THẬT TỪ BACKEND
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<BackendStats | null>(null);
+  const [error, setError] = useState("");
 
   // GỌI API LẤY SỐ LIỆU THỐNG KÊ TỪ SPRING BOOT
   useEffect(() => {
-    api.get("/api/dashboard/stats")
-      .then(res => setStats(res.data))
-      .catch(err => console.error("Lỗi tải thống kê:", err));
+    api.get<BackendStats>("/api/dashboard/stats")
+      .then((response) => {
+        setStats(response.data);
+        setError("");
+      })
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Unable to load dashboard statistics."));
   }, []);
 
   // CẬP NHẬT LẠI MẢNG KPI DỰA TRÊN DATA THẬT (Phải nằm trong component để dùng được state 'stats')
   const KPI = [
     { label: "Total Flights", value: stats?.totalFlights?.toLocaleString() || "...", sub: "+12.5% vs yesterday", subColor: "#22c55e", icon: "✈", iconBg: "#eff6ff", iconColor: "#3b82f6" },
-    { label: "On Time", value: stats ? (stats.totalFlights - stats.delayedFlights).toLocaleString() : "...", sub: "+8.9%", subColor: "#22c55e", icon: "✓", iconBg: "#dcfce7", iconColor: "#16a34a", extra: "+83.6%" },
+    { label: "On Time", value: stats?.onTimeFlights?.toLocaleString() || "...", sub: "Live count", subColor: "#22c55e", icon: "✓", iconBg: "#dcfce7", iconColor: "#16a34a", extra: "Operational" },
     { label: "Delayed", value: stats?.delayedFlights?.toString() || "...", sub: "-2.1%", subColor: "#22c55e", icon: "⏱", iconBg: "#fef3c7", iconColor: "#d97706", extra: "+5.6%" },
-    { label: "Cancelled", value: "0", sub: "-1.2%", subColor: "#22c55e", icon: "✕", iconBg: "#fee2e2", iconColor: "#ef4444", extra: "+0.8%" },
-    { label: "Total Passengers", value: stats?.totalPassengers ? `${stats.totalPassengers.toLocaleString()}+` : "...", sub: "+15.3%", subColor: "#22c55e", icon: "👥", iconBg: "#f5f3ff", iconColor: "#7c3aed" },
+    { label: "Cancelled", value: stats?.cancelledFlights?.toLocaleString() || "...", sub: "Live count", subColor: "#ef4444", icon: "✕", iconBg: "#fee2e2", iconColor: "#ef4444", extra: "Current data" },
+    { label: "Total Users", value: stats?.totalUsers?.toLocaleString() || "...", sub: "Railway accounts", subColor: "#22c55e", icon: "👥", iconBg: "#f5f3ff", iconColor: "#7c3aed" },
   ];
 
+  // Đổi sang gọi API Backend Spring Boot (Gemini) của chúng ta
+  async function sendAI() {
+    if (!aiInput.trim()) return;
+    const question = aiInput;
+    setAiInput("");
+    setLoading(true);
+    try {
+      const { data } = await api.post("/api/ai/chat", { question });
+      const answer = data.answer || "Sorry, I couldn't get a response.";
+      setAiMessages(prev => [...prev, { q: question, a: answer }]);
+    } catch {
+      setAiMessages(prev => [...prev, { q: question, a: "Connection error. Please check if Backend is running." }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-[#f4f7fb] p-4 sm:p-6 lg:p-8">
+    <>
       <style precedence="default" href="/styles/dashboard-page">{`
         /* ── KPI CARDS ── */
         .kpi-grid {
@@ -104,6 +128,24 @@ export default function AdminDashboard() {
         }
         .delay-bar-bg { height: 6px; background: #f3f4f6; border-radius: 999px; overflow: hidden; flex: 1; }
         
+        /* AI chat */
+        .ai-messages { max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
+        .ai-input-row {
+          display: flex; gap: 8px; align-items: center;
+          border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; background: #f9fafb;
+        }
+        .ai-input {
+          flex: 1; border: none; outline: none; background: transparent;
+          font-size: 13px; color: #374151; font-family: inherit;
+        }
+        .ai-send {
+          background: #3b82f6; color: #fff; border: none; width: 30px; height: 30px;
+          border-radius: 8px; cursor: pointer; display: flex; align-items: center;
+          justify-content: center; font-size: 14px; flex-shrink: 0; transition: background .18s;
+        }
+        .ai-send:hover { background: #2563eb; }
+        .ai-send:disabled { background: #93c5fd; cursor: not-allowed; }
+
         .generate-btn {
           background: #f0f9ff; color: #3b82f6; border: 1.5px solid #bfdbfe;
           border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700;
@@ -119,6 +161,7 @@ export default function AdminDashboard() {
       `}</style>
 
       {/* ── KPI CARDS ── */}
+      {error && <div style={{ marginBottom: 16, border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", borderRadius: 12, padding: "10px 14px", fontSize: 13 }}>{error}</div>}
       <div className="kpi-grid">
         {KPI.map(k => (
           <div key={k.label} className="kpi-card">
@@ -217,30 +260,33 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="bottom-card relative overflow-hidden bg-[linear-gradient(145deg,#0f172a,#172554)] text-white">
-          <div className="absolute -right-14 -top-14 h-40 w-40 rounded-full bg-blue-500/25 blur-3xl" />
-          <div className="relative flex h-full min-h-[210px] flex-col">
-            <div className="flex items-center justify-between">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-500/15 text-blue-300">
-                <Bot className="h-5 w-5" />
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Gemini ready
-              </span>
+        <div className="bottom-card" style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#3b82f6,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🤖</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>AI Assistant</div>
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>Ask me anything about flights...</div>
             </div>
-            <div className="mt-5">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-blue-300">
-                <Sparkles className="h-3.5 w-3.5" /> AI operations
+          </div>
+
+          <div className="ai-messages" style={{ flex: 1 }}>
+            {aiMessages.length === 0 && <p style={{ fontSize: 12, color: "#d1d5db", textAlign: "center", padding: "16px 0" }}>Ask a question about today&apos;s flights</p>}
+            {aiMessages.map((m, i) => (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div style={{ background: "#eff6ff", borderRadius: "10px 10px 2px 10px", padding: "7px 11px", fontSize: 12, color: "#1d4ed8", marginBottom: 5, display: "inline-block", maxWidth: "90%", marginLeft: "auto", float: "right", clear: "both" }}>{m.q}</div>
+                <div style={{ clear: "both" }} />
+                <div style={{ background: "#f9fafb", borderRadius: "2px 10px 10px 10px", padding: "7px 11px", fontSize: 12, color: "#374151", lineHeight: 1.5, maxWidth: "95%" }}>{m.a}</div>
               </div>
-              <h3 className="mt-2 text-xl font-semibold">Analyze aviation data in a full workspace.</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Ask about flights, managed airports, weather, delays and current system statistics.</p>
-            </div>
-            <Link href="/admin/ai" className="mt-auto flex items-center justify-between rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500">
-              Open AI workspace <ArrowRight className="h-4 w-4" />
-            </Link>
+            ))}
+            {loading && <div style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>AI is thinking…</div>}
+          </div>
+
+          <div className="ai-input-row">
+            <input className="ai-input" placeholder="Type your question..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendAI()} />
+            <button className="ai-send" onClick={sendAI} disabled={loading || !aiInput.trim()}>➤</button>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

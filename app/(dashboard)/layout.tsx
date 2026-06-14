@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   Bell,
+  BarChart3,
   Bot,
   Building2,
   LayoutDashboard,
@@ -20,7 +21,6 @@ import {
   Sparkles,
   Ticket,
   UserCircle,
-  Users,
   UsersRound,
   X,
   type LucideIcon,
@@ -39,7 +39,7 @@ const ADMIN_LINKS: NavLink[] = [
   { icon: Building2, label: 'Airports', href: '/admin/airports' },
   { icon: Plane, label: 'Airlines', href: '/admin/airlines' },
   { icon: PlaneTakeoff, label: 'Flights', href: '/admin/flights' },
-  { icon: Users, label: 'Passengers', href: '/admin/reports' },
+  { icon: BarChart3, label: 'Reports', href: '/admin/reports' },
   { icon: UsersRound, label: 'Users', href: '/admin/users' },
   { icon: Bot, label: 'AI Summary', href: '/admin/ai' },
   { icon: Settings, label: 'Settings', href: '/admin/settings' },
@@ -55,7 +55,7 @@ const USER_LINKS: NavLink[] = [
 ]
 
 const PAGE_TITLES: Record<string, string> = {
-  '/user': 'Flight overview',
+  '/user': 'My flights',
   '/user/searchflight': 'Search flights',
   '/user/live-map': 'Live map',
   '/user/notifications': 'Notifications',
@@ -65,7 +65,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/airports': 'Airport management',
   '/admin/airlines': 'Airline management',
   '/admin/flights': 'Flight management',
-  '/admin/passengers': 'Passenger management',
+  '/admin/reports': 'Reports & analytics',
   '/admin/users': 'User management',
   '/admin/ai': 'AI operations',
   '/admin/settings': 'System settings',

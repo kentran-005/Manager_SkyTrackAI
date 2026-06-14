@@ -21,26 +21,28 @@ export default function AirportsManagement() {
   const [form, setForm] = useState<Airport>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   
   // State phục vụ giao diện mới
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchAirports = async () => {
-    try {
-      const { data } = await api.get("/api/airports");
-      setAirports(data);
-    } catch (error) {
-      console.error("Lỗi tải sân bay:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Gọi API lấy danh sách sân bay
   useEffect(() => {
     fetchAirports();
   }, []);
+
+  async function fetchAirports() {
+    try {
+      const response = await api.get<Airport[]>("/api/airports");
+      setAirports(Array.isArray(response.data) ? response.data : []);
+      setError("");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load airports.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -49,21 +51,16 @@ export default function AirportsManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
-      if (editingId) {
-        await api.put(`/api/airports/${editingId}`, form);
-      } else {
-        await api.post("/api/airports", form);
-      }
+      if (editingId) await api.put(`/api/airports/${editingId}`, form);
+      else await api.post("/api/airports", form);
 
       setForm(emptyForm);
       setEditingId(null);
       setIsModalOpen(false); // Đóng modal sau khi lưu thành công
-      fetchAirports();
-      alert(editingId ? "Cập nhật thành công!" : "Thêm mới thành công!");
-    } catch {
-      alert("Lỗi: Mã sân bay có thể đã tồn tại!");
+      await fetchAirports();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Airport code may already exist.");
     }
   };
 
@@ -78,9 +75,9 @@ export default function AirportsManagement() {
 
     try {
       await api.delete(`/api/airports/${id}`);
-      fetchAirports();
-    } catch {
-      alert("Lỗi khi xóa sân bay!");
+      await fetchAirports();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to delete airport.");
     }
   };
 
@@ -127,6 +124,8 @@ export default function AirportsManagement() {
           />
         </div>
       </div>
+
+      {error && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
       {/* ── BẢNG DỮ LIỆU SÂN BAY ── */}
       <div className="bg-white border border-slate-100 rounded-2xl shadow-2xs overflow-hidden">

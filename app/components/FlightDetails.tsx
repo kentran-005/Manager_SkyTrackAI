@@ -1,6 +1,6 @@
 'use client';
 
-import { Star, Bell, Wind, Droplets, Eye, Navigation } from 'lucide-react';
+import { Star, Bell, Wind, Droplets, Eye } from 'lucide-react';
 
 interface Flight {
   id: string | number;

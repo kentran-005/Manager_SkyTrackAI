@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Clock3, Loader2, Plane, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, Clock3, Plane, Search, SlidersHorizontal } from "lucide-react";
 import api from "@/lib/axios";
 import { type BackendFlight, type FlightCard, mapBackendFlight, normalizeText } from "@/lib/skytrack-data";
 
@@ -232,4 +232,3 @@ export default function FlightsPage() {
     </main>
   );
 }
-

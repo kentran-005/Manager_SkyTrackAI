@@ -4,7 +4,7 @@ export interface BackendFlight {
   id?: number | string;
   flightCode?: string;
   flightNumber?: string;
-  airline?: { name?: string; code?: string; logo?: string };
+  airline?: { id?: number; name?: string; code?: string; logo?: string };
   departureAirport?: { code?: string; city?: string; name?: string };
   arrivalAirport?: { code?: string; city?: string; name?: string };
   departureTime?: string;
@@ -37,6 +37,8 @@ export interface RealtimeFlightStatus {
   lastSuccessfulUpdate?: string | null;
   nextRefreshAllowedAt?: string | null;
   message: string;
+  authenticationMode?: string;
+  authenticationMessage?: string;
 }
 
 export interface BackendAirport {
@@ -50,6 +52,13 @@ export interface BackendAirport {
   iata?: string;
 }
 
+export interface BackendAirline {
+  id?: number;
+  code?: string;
+  name?: string;
+  logo?: string;
+}
+
 export interface BackendStats {
   totalFlights?: number;
   delayedFlights?: number;
@@ -60,6 +69,8 @@ export interface BackendStats {
   airborneFlights?: number;
   groundFlights?: number;
   totalTrackedFlights?: number;
+  totalUsers?: number;
+  onTimeFlights?: number;
 }
 
 export interface FlightCard {
