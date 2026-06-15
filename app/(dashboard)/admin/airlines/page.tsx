@@ -4,8 +4,7 @@ import {
   Search, 
   Plus, 
   Pencil, 
-  Trash2, 
-  ChevronDown 
+  Trash2
 } from 'lucide-react';
 import api from "@/lib/axios";
 import type { BackendAirline } from "@/lib/skytrack-data";
@@ -115,9 +114,7 @@ export default function AirlinesPage() {
                 <th className="py-4 px-6 w-24">Code</th>
                 <th className="py-4 px-6">Airline Name</th>
                 <th className="py-4 px-6 w-32 text-center">Logo</th>
-                <th className="py-4 px-6">Country</th>
-                <th className="py-4 px-6 w-32">Status</th>
-                <th className="py-4 px-6 w-28 text-center">Actions</th>
+                  <th className="py-4 px-6 w-28 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm font-medium text-slate-700">
@@ -131,14 +128,6 @@ export default function AirlinesPage() {
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-900">{airline.name}</td>
                   <td className="py-4 px-6 text-center text-xl">{airline.logo || "✈"}</td>
-                  <td className="py-4 px-6 text-slate-600">Vietnam</td>
-                  <td className="py-4 px-6">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      'bg-emerald-50 text-emerald-600'
-                    }`}>
-                      Active
-                    </span>
-                  </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center justify-center gap-3">
                       <button onClick={() => void editAirline(airline)} className="text-slate-400 hover:text-blue-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
@@ -151,30 +140,9 @@ export default function AirlinesPage() {
                   </td>
                 </tr>
               ))}
-              {!loading && visibleAirlines.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-slate-400">No airlines found.</td></tr>}
+              {!loading && visibleAirlines.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-slate-400">No airlines found.</td></tr>}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination Section */}
-        <div className="flex justify-between items-center mt-6">
-          {/* Page Numbers */}
-          <div className="flex items-center gap-1">
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium bg-blue-600 text-white shadow-md shadow-blue-600/10">1</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium text-slate-600 hover:bg-white hover:border border-transparent hover:border-slate-200 transition-all">2</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium text-slate-600 hover:bg-white hover:border border-transparent hover:border-slate-200 transition-all">3</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium text-slate-600 hover:bg-white hover:border border-transparent hover:border-slate-200 transition-all">4</button>
-            <span className="w-8 h-8 flex items-center justify-center text-slate-400">...</span>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium text-slate-600 hover:bg-white hover:border border-transparent hover:border-slate-200 transition-all">6</button>
-          </div>
-
-          {/* Rows Per Page Dropdown */}
-          <div className="relative">
-            <button className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-              10 / page
-              <ChevronDown className="w-4 h-4 text-slate-400" />
-            </button>
-          </div>
         </div>
 
       </main>

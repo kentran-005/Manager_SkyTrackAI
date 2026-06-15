@@ -1,39 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
 import api from "@/lib/axios";
-import type { BackendStats } from "@/lib/skytrack-data";
+import type { BackendFlight, BackendStats } from "@/lib/skytrack-data";
 
-// ── Data ──
-const TREND_DATA = [
-  { date: "26/05", total: 1480, onTime: 1240, delayed: 195, cancelled: 45 },
-  { date: "27/05", total: 1510, onTime: 1260, delayed: 205, cancelled: 45 },
-  { date: "28/05", total: 1495, onTime: 1255, delayed: 195, cancelled: 45 },
-  { date: "29/05", total: 1525, onTime: 1275, delayed: 205, cancelled: 45 },
-  { date: "30/05", total: 1530, onTime: 1280, delayed: 205, cancelled: 45 },
-  { date: "31/05", total: 1518, onTime: 1268, delayed: 205, cancelled: 45 },
-  { date: "01/06", total: 1540, onTime: 1441, delayed: 87,  cancelled: 12 },
-];
-
-const AIRLINE_DATA = [
-  { name: "Vietnam Airlines", value: 42, color: "#3b82f6" },
-  { name: "VietJet Air",      value: 28, color: "#8b5cf6" },
-  { name: "Bamboo Airways",   value: 18, color: "#10b981" },
-  { name: "Pacific Airlines", value: 7,  color: "#f59e0b" },
-  { name: "Others",           value: 5,  color: "#e5e7eb" },
-];
-
-const DELAY_AIRPORTS = [
-  { code: "SGN - Tan Son Nhat", rate: 13.2, color: "#ef4444" },
-  { code: "HAN - Noi Bai",      rate: 8.7,  color: "#f97316" },
-  { code: "DAD - Da Nang",      rate: 6.1,  color: "#f59e0b" },
-  { code: "CXR - Cam Ranh",     rate: 4.3,  color: "#84cc16" },
-  { code: "PQC - Phu Quoc",     rate: 3.2,  color: "#22c55e" },
-];
+const CHART_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#64748b"];
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -56,26 +31,83 @@ export default function AdminDashboard() {
 
   // STATE LƯU DỮ LIỆU THẬT TỪ BACKEND
   const [stats, setStats] = useState<BackendStats | null>(null);
+  const [flights, setFlights] = useState<BackendFlight[]>([]);
   const [error, setError] = useState("");
 
-  // GỌI API LẤY SỐ LIỆU THỐNG KÊ TỪ SPRING BOOT
   useEffect(() => {
-    api.get<BackendStats>("/api/dashboard/stats")
-      .then((response) => {
-        setStats(response.data);
+    Promise.all([
+      api.get<BackendStats>("/api/dashboard/stats"),
+      api.get<BackendFlight[]>("/api/flights"),
+    ])
+      .then(([statsResponse, flightsResponse]) => {
+        setStats(statsResponse.data);
+        setFlights(Array.isArray(flightsResponse.data) ? flightsResponse.data : []);
         setError("");
       })
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Unable to load dashboard statistics."));
   }, []);
 
-  // CẬP NHẬT LẠI MẢNG KPI DỰA TRÊN DATA THẬT (Phải nằm trong component để dùng được state 'stats')
   const KPI = [
-    { label: "Total Flights", value: stats?.totalFlights?.toLocaleString() || "...", sub: "+12.5% vs yesterday", subColor: "#22c55e", icon: "✈", iconBg: "#eff6ff", iconColor: "#3b82f6" },
-    { label: "On Time", value: stats?.onTimeFlights?.toLocaleString() || "...", sub: "Live count", subColor: "#22c55e", icon: "✓", iconBg: "#dcfce7", iconColor: "#16a34a", extra: "Operational" },
-    { label: "Delayed", value: stats?.delayedFlights?.toString() || "...", sub: "-2.1%", subColor: "#22c55e", icon: "⏱", iconBg: "#fef3c7", iconColor: "#d97706", extra: "+5.6%" },
-    { label: "Cancelled", value: stats?.cancelledFlights?.toLocaleString() || "...", sub: "Live count", subColor: "#ef4444", icon: "✕", iconBg: "#fee2e2", iconColor: "#ef4444", extra: "Current data" },
-    { label: "Total Users", value: stats?.totalUsers?.toLocaleString() || "...", sub: "Railway accounts", subColor: "#22c55e", icon: "👥", iconBg: "#f5f3ff", iconColor: "#7c3aed" },
+    { label: "Total Flights", value: stats?.totalFlights?.toLocaleString() ?? "...", sub: "Current database", subColor: "#64748b", icon: "✈", iconBg: "#eff6ff", iconColor: "#3b82f6" },
+    { label: "On Time", value: stats?.onTimeFlights?.toLocaleString() ?? "...", sub: "Scheduled and operational", subColor: "#16a34a", icon: "✓", iconBg: "#dcfce7", iconColor: "#16a34a" },
+    { label: "Delayed", value: stats?.delayedFlights?.toLocaleString() ?? "...", sub: "Current delayed flights", subColor: "#d97706", icon: "⏱", iconBg: "#fef3c7", iconColor: "#d97706" },
+    { label: "Cancelled", value: stats?.cancelledFlights?.toLocaleString() ?? "...", sub: "Current cancelled flights", subColor: "#ef4444", icon: "✕", iconBg: "#fee2e2", iconColor: "#ef4444" },
+    { label: "Total Users", value: stats?.totalUsers?.toLocaleString() ?? "...", sub: "Registered accounts", subColor: "#7c3aed", icon: "👥", iconBg: "#f5f3ff", iconColor: "#7c3aed" },
   ];
+
+  const trendData = useMemo(() => {
+    const grouped = new Map<string, { date: string; total: number; onTime: number; delayed: number; cancelled: number }>();
+    flights.forEach((flight) => {
+      if (!flight.departureTime) return;
+      const date = new Date(flight.departureTime);
+      if (Number.isNaN(date.getTime())) return;
+      const key = date.toISOString().slice(0, 10);
+      const item = grouped.get(key) ?? {
+        date: date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }),
+        total: 0,
+        onTime: 0,
+        delayed: 0,
+        cancelled: 0,
+      };
+      item.total += 1;
+      if (["ON_TIME", "SCHEDULED", "BOARDING"].includes(flight.status ?? "")) item.onTime += 1;
+      if (flight.status === "DELAYED") item.delayed += 1;
+      if (flight.status === "CANCELLED") item.cancelled += 1;
+      grouped.set(key, item);
+    });
+    return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-7).map(([, value]) => value);
+  }, [flights]);
+
+  const airlineData = useMemo(() => {
+    const counts = new Map<string, number>();
+    flights.forEach((flight) => {
+      const name = flight.airline?.name || flight.airline?.code || "Unknown";
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, value], index) => ({ name, value, color: CHART_COLORS[index] }));
+  }, [flights]);
+
+  const delayAirports = useMemo(() => {
+    const counts = new Map<string, { total: number; delayed: number }>();
+    flights.forEach((flight) => {
+      const code = flight.departureAirport?.code || "Unknown";
+      const item = counts.get(code) ?? { total: 0, delayed: 0 };
+      item.total += 1;
+      if (flight.status === "DELAYED") item.delayed += 1;
+      counts.set(code, item);
+    });
+    return [...counts.entries()]
+      .map(([code, value]) => ({ code, rate: value.total ? (value.delayed / value.total) * 100 : 0 }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 5);
+  }, [flights]);
+
+  const onTimeRate = flights.length
+    ? Math.round((flights.filter((flight) => ["ON_TIME", "SCHEDULED", "BOARDING"].includes(flight.status ?? "")).length / flights.length) * 1000) / 10
+    : 0;
 
   // Đổi sang gọi API Backend Spring Boot (Gemini) của chúng ta
   async function sendAI() {
@@ -170,8 +202,7 @@ export default function AdminDashboard() {
               <div style={{ width: 32, height: 32, borderRadius: 8, background: k.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: k.iconColor }}>{k.icon}</div>
             </div>
             <div style={{ fontSize: 26, fontWeight: 800, color: "#111827", lineHeight: 1, marginBottom: 8 }}>{k.value}</div>
-            {k.extra && <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}><span style={{ color: "#3b82f6", fontWeight: 600 }}>{k.extra}</span></div>}
-            <div style={{ fontSize: 11.5, color: k.subColor, display: "flex", alignItems: "center", gap: 4 }}>↑ {k.sub}</div>
+            <div style={{ fontSize: 11.5, color: k.subColor, display: "flex", alignItems: "center", gap: 4 }}>{k.sub}</div>
           </div>
         ))}
       </div>
@@ -181,7 +212,7 @@ export default function AdminDashboard() {
         <div className="chart-card">
           <div className="chart-title">Flights Trend (7 Days)</div>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={TREND_DATA} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+            <LineChart data={trendData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
               <Tooltip content={<ChartTooltip />} />
@@ -198,23 +229,23 @@ export default function AdminDashboard() {
           <div className="chart-title">Flights by Airline</div>
           <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
             <PieChart width={160} height={160}>
-              <Pie data={AIRLINE_DATA} cx={75} cy={75} innerRadius={50} outerRadius={75} dataKey="value" strokeWidth={0}>
-                {AIRLINE_DATA.map((e, i) => <Cell key={i} fill={e.color} />)}
+              <Pie data={airlineData} cx={75} cy={75} innerRadius={50} outerRadius={75} dataKey="value" strokeWidth={0}>
+                {airlineData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
               </Pie>
             </PieChart>
             <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center", pointerEvents: "none" }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>1,540</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>{flights.length}</div>
               <div style={{ fontSize: 10, color: "#9ca3af" }}>Total</div>
             </div>
           </div>
           <div style={{ marginTop: 10 }}>
-            {AIRLINE_DATA.map(a => (
+            {airlineData.map(a => (
               <div key={a.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: a.color, display: "inline-block" }} />
                   <span style={{ fontSize: 11.5, color: "#374151" }}>{a.name}</span>
                 </div>
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{a.value}%</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{a.value}</span>
               </div>
             ))}
           </div>
@@ -222,14 +253,14 @@ export default function AdminDashboard() {
 
         <div className="chart-card">
           <div className="chart-title">Delay Rate by Airport</div>
-          {DELAY_AIRPORTS.map(a => (
+          {delayAirports.map((a, index) => (
             <div key={a.code} style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                 <span style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{a.code}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{a.rate}%</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{a.rate.toFixed(1)}%</span>
               </div>
               <div className="delay-bar-bg">
-                <div style={{ height: "100%", borderRadius: 999, width: `${(a.rate / 15) * 100}%`, background: a.color, transition: "width .6s ease" }} />
+                <div style={{ height: "100%", borderRadius: 999, width: `${Math.min(a.rate, 100)}%`, background: CHART_COLORS[index], transition: "width .6s ease" }} />
               </div>
             </div>
           ))}
@@ -244,15 +275,19 @@ export default function AdminDashboard() {
             <button className="generate-btn">Generate Summary</button>
           </div>
           <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
-            Today, <strong>1,540 flights</strong> were operated across <strong>22 airports</strong>.<br />
-            <strong>87 flights</strong> were delayed, mainly due to weather conditions at SGN and HAN.<br />
-            Overall performance is <strong>93.6%</strong>, higher than yesterday by 2.3%.
+            The system currently contains <strong>{stats?.totalFlights ?? flights.length} flights</strong> across <strong>{stats?.totalAirports ?? 0} airports</strong>.<br />
+            <strong>{stats?.delayedFlights ?? 0} flights</strong> are delayed and <strong>{stats?.cancelledFlights ?? 0}</strong> are cancelled.<br />
+            Current on-time performance is <strong>{onTimeRate.toFixed(1)}%</strong>.
           </p>
         </div>
 
         <div className="bottom-card">
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 14 }}>Recommendations</div>
-          {["Increase check-in counters at SGN during peak hours.", "Monitor weather conditions at HAN for next 24 hours.", "Consider additional flights on SGN – DAD route."].map((r, i) => (
+          {[
+            (stats?.delayedFlights ?? 0) > 0 ? "Review delayed flights and notify subscribed users." : "No delayed flights currently require escalation.",
+            delayAirports[0]?.rate ? `Monitor ${delayAirports[0].code}, which has the highest current departure delay rate.` : "There is not enough flight data to calculate airport delay rates.",
+            "Use the reports page for a detailed status and airline breakdown.",
+          ].map((r, i) => (
             <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "flex-start" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", marginTop: 6, flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{r}</span>

@@ -14,7 +14,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isExpiredJwt(token: string) {
-  if (token.startsWith("mock-token-")) return false;
+  if (token.startsWith("mock-token-")) {
+    return process.env.NEXT_PUBLIC_NO_BACKEND !== "true";
+  }
 
   try {
     const payload = token.split(".")[1];

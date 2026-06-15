@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Bell, Check, CheckCircle2, Clock3, Info, Loader2, Trash2, XCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, Bell, Check, CheckCircle2, Clock3, Info, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import api from '@/lib/axios'
 
 type NotificationType = 'warning' | 'info' | 'success' | 'error'
@@ -24,27 +24,35 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [busyId, setBusyId] = useState<number | 'all' | null>(null)
   const [error, setError] = useState('')
   const unread = notifications.filter((item) => !item.read).length
   const visible = useMemo(() => notifications.filter((item) => filter === 'all' || (filter === 'unread' ? !item.read : item.read)), [filter, notifications])
 
-  useEffect(() => {
-    let mounted = true
-    api.get<Notification[]>('/api/notifications/me')
-      .then((response) => {
-        if (mounted) setNotifications(Array.isArray(response.data) ? response.data : [])
-      })
-      .catch((requestError) => {
-        if (mounted) setError(requestError instanceof Error ? requestError.message : 'Could not load notifications.')
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => {
-      mounted = false
+  const loadNotifications = useCallback(async (initial = false) => {
+    if (initial) setLoading(true)
+    else setRefreshing(true)
+    setError('')
+
+    try {
+      const response = await api.get<Notification[]>('/api/notifications/me')
+      setNotifications(Array.isArray(response.data) ? response.data : [])
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Could not load notifications.')
+    } finally {
+      if (initial) setLoading(false)
+      else setRefreshing(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadNotifications(true)
+  }, [loadNotifications])
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('skytrack-notifications-updated', { detail: unread }))
+  }, [unread])
 
   async function markRead(id: number) {
     setBusyId(id)
@@ -96,7 +104,12 @@ export default function NotificationsPage() {
   function formatTime(value?: string) {
     if (!value) return 'Recently'
     const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? 'Recently' : date.toLocaleString()
+    return Number.isNaN(date.getTime())
+      ? 'Recently'
+      : new Intl.DateTimeFormat('en-GB', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(date)
   }
 
   return (
@@ -105,12 +118,15 @@ export default function NotificationsPage() {
         <section className="relative overflow-hidden rounded-[28px] bg-[#07111f] p-6 text-white shadow-xl sm:p-8">
           <div className="absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_center,rgba(37,99,235,.32),transparent_60%)]" />
           <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div><div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Activity center</div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">Stay ahead of every change.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{unread ? `${unread} unread updates need your attention.` : 'You are all caught up.'}</p></div>
-            {unread > 0 && <button type="button" onClick={() => void markAllRead()} disabled={busyId !== null} className="relative inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">{busyId === 'all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Mark all as read</button>}
+            <div><div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Activity center</div><h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">Stay ahead of every change.</h1><p aria-live="polite" className="mt-3 max-w-xl text-sm leading-6 text-slate-400">{unread ? `${unread} unread updates need your attention.` : 'You are all caught up.'}</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void loadNotifications()} disabled={refreshing || busyId !== null} className="relative inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15 disabled:cursor-wait disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh</button>
+              {unread > 0 && <button type="button" onClick={() => void markAllRead()} disabled={busyId !== null || refreshing} className="relative inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">{busyId === 'all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Mark all as read</button>}
+            </div>
           </div>
         </section>
 
-        {error && <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+        {error && <div role="alert" className="mt-5 flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:flex-row sm:items-center sm:justify-between"><span>{error}</span><button type="button" onClick={() => void loadNotifications()} disabled={refreshing} className="inline-flex w-fit items-center gap-1.5 font-semibold text-rose-800 hover:text-rose-950 disabled:opacity-60"><RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Try again</button></div>}
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
@@ -130,8 +146,8 @@ export default function NotificationsPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div className="flex items-center gap-2"><h2 className="font-semibold text-slate-950">{notification.title}</h2>{!notification.read && <span className={`h-2 w-2 rounded-full ${style.dot}`} />}</div><span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400"><Clock3 className="h-3 w-3" />{formatTime(notification.createdAt)}</span></div>
                   <p className="mt-2 text-sm leading-6 text-slate-500">{notification.message}</p>
                   <div className="mt-3 flex gap-2">
-                    {!notification.read && <button type="button" onClick={() => void markRead(notification.id)} disabled={busyId !== null} className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60">Mark read</button>}
-                    <button type="button" onClick={() => void deleteNotification(notification.id)} disabled={busyId !== null} className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-wait disabled:opacity-60">{busyId === notification.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete</button>
+                    {!notification.read && <button type="button" onClick={() => void markRead(notification.id)} disabled={busyId !== null} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60">{busyId === notification.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Mark read</button>}
+                    <button type="button" onClick={() => void deleteNotification(notification.id)} disabled={busyId !== null} className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-wait disabled:opacity-60"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
                   </div>
                 </div>
               </article>
@@ -139,7 +155,7 @@ export default function NotificationsPage() {
           })}
         </div>
 
-        {!loading && visible.length === 0 && <div className="mt-4 grid min-h-72 place-items-center rounded-[28px] border border-dashed border-slate-300 bg-white text-center"><div><Bell className="mx-auto h-9 w-9 text-slate-300" /><h2 className="mt-4 font-semibold">No notifications here</h2><p className="mt-1 text-sm text-slate-500">There are no items matching the selected filter.</p></div></div>}
+        {!loading && !error && visible.length === 0 && <div className="mt-4 grid min-h-72 place-items-center rounded-[28px] border border-dashed border-slate-300 bg-white text-center"><div><Bell className="mx-auto h-9 w-9 text-slate-300" /><h2 className="mt-4 font-semibold">No notifications here</h2><p className="mt-1 text-sm text-slate-500">There are no items matching the selected filter.</p></div></div>}
         {loading && <div className="mt-4 grid min-h-72 place-items-center rounded-[28px] border border-slate-200 bg-white text-sm font-semibold text-slate-500"><span className="flex items-center gap-2"><Loader2 className="h-5 w-5 animate-spin text-blue-600" /> Loading notifications...</span></div>}
       </div>
     </div>

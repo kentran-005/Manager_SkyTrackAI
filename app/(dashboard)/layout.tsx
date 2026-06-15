@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/lib/authContext'
+import api from '@/lib/axios'
 
 interface NavLink {
   icon: LucideIcon
@@ -39,6 +40,7 @@ const ADMIN_LINKS: NavLink[] = [
   { icon: Building2, label: 'Airports', href: '/admin/airports' },
   { icon: Plane, label: 'Airlines', href: '/admin/airlines' },
   { icon: PlaneTakeoff, label: 'Flights', href: '/admin/flights' },
+  { icon: MapIcon, label: 'Live map', href: '/admin/live-map' },
   { icon: BarChart3, label: 'Reports', href: '/admin/reports' },
   { icon: UsersRound, label: 'Users', href: '/admin/users' },
   { icon: Bot, label: 'AI Summary', href: '/admin/ai' },
@@ -49,7 +51,7 @@ const USER_LINKS: NavLink[] = [
   { icon: Ticket, label: 'My flights', href: '/user' },
   { icon: Search, label: 'Search flights', href: '/user/searchflight' },
   { icon: MapIcon, label: 'Live map', href: '/user/live-map' },
-  { icon: Bell, label: 'Notifications', href: '/user/notifications', badge: 3 },
+  { icon: Bell, label: 'Notifications', href: '/user/notifications' },
   { icon: MessageSquare, label: 'AI assistant', href: '/user/ai' },
   { icon: UserCircle, label: 'Profile', href: '/user/profile' },
 ]
@@ -65,6 +67,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/airports': 'Airport management',
   '/admin/airlines': 'Airline management',
   '/admin/flights': 'Flight management',
+  '/admin/live-map': 'Live flight map',
   '/admin/reports': 'Reports & analytics',
   '/admin/users': 'User management',
   '/admin/ai': 'AI operations',
@@ -81,6 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const { user, logout, isLoading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   useEffect(() => {
     if (isLoading) return
@@ -92,6 +96,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [isLoading, pathname, router, user])
 
   useEffect(() => setSidebarOpen(false), [pathname])
+
+  useEffect(() => {
+    if (isLoading || !user || user.role === 'ADMIN') {
+      setUnreadNotifications(0)
+      return
+    }
+
+    let active = true
+    api.get<Array<{ read?: boolean }>>('/api/notifications/me')
+      .then((response) => {
+        if (active) {
+          const notifications = Array.isArray(response.data) ? response.data : []
+          setUnreadNotifications(notifications.filter((item) => !item.read).length)
+        }
+      })
+      .catch(() => {
+        if (active) setUnreadNotifications(0)
+      })
+
+    function handleNotificationUpdate(event: Event) {
+      const nextCount = (event as CustomEvent<number>).detail
+      if (Number.isFinite(nextCount)) setUnreadNotifications(Math.max(0, nextCount))
+    }
+
+    window.addEventListener('skytrack-notifications-updated', handleNotificationUpdate)
+    return () => {
+      active = false
+      window.removeEventListener('skytrack-notifications-updated', handleNotificationUpdate)
+    }
+  }, [isLoading, user])
 
   if (isLoading || !user || (pathname.startsWith('/admin') && user.role !== 'ADMIN')) {
     return (
@@ -142,6 +176,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {links.map((link) => {
             const Icon = link.icon
             const active = isActiveRoute(pathname, link.href)
+            const badge = link.href === '/user/notifications' ? unreadNotifications : link.badge
             return (
               <Link
                 key={link.href}
@@ -152,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <Icon className={`h-[18px] w-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-blue-300'}`} />
                 <span className="flex-1">{link.label}</span>
-                {link.badge ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{link.badge}</span> : null}
+                {badge ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{badge > 99 ? '99+' : badge}</span> : null}
               </Link>
             )
           })}
@@ -203,9 +238,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
             <Link href={isAdminRoute ? '/admin' : '/user/notifications'} aria-label={isAdminRoute ? 'Admin dashboard' : 'Open notifications'} className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600">
               <Bell className="h-4 w-4" />
-              {!isAdminRoute && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-white" />}
+              {!isAdminRoute && unreadNotifications > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
             </Link>
-            <Link href={isAdminRoute ? '/admin' : '/user/profile'} aria-label={isAdminRoute ? 'Admin profile' : 'Open profile'} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
+            <Link href="/user/profile" aria-label="Open profile" className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
               {user.name?.charAt(0).toUpperCase() || 'U'}
             </Link>
           </div>

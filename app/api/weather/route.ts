@@ -30,7 +30,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Airport coordinates are outside the valid range." }, { status: 400 });
   }
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const backendUrl = (
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8080"
+  ).replace(/\/+$/, "");
   const params = new URLSearchParams({ latitude: String(latitude), longitude: String(longitude) });
 
   try {

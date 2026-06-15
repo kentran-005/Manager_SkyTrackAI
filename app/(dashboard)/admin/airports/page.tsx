@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Edit3, Trash2, ChevronDown, X, Save } from "lucide-react";
+import { Search, Plus, Edit3, Trash2, X, Save } from "lucide-react";
 import api from "@/lib/axios";
 
 interface Airport {
@@ -193,32 +193,6 @@ export default function AirportsManagement() {
           </div>
         )}
 
-        {/* ── PHÂN TRANG (PAGINATION) ── */}
-        <div className="p-4 bg-slate-50/40 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4].map((page) => (
-              <button 
-                key={page} 
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition ${
-                  page === 1 
-                    ? "bg-blue-600 text-white shadow-sm shadow-blue-500/10" 
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {page}
-              </button>
-            ))}
-            <span className="text-slate-300 px-1 text-xs font-bold">—</span>
-            <button className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
-              10
-            </button>
-          </div>
-
-          <button className="flex items-center justify-between gap-4 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:border-slate-300 transition">
-            <span>10 / page</span>
-            <ChevronDown size={12} className="text-slate-400" />
-          </button>
-        </div>
       </div>
 
       {/* ── MODAL FORM THÊM / SỬA (CHỈ HIỂN THỊ KHI ĐƯỢC KÍCH HOẠT) ── */}
