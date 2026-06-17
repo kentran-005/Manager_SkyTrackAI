@@ -1,10 +1,11 @@
 'use client'
 
 import { type ComponentType, type PropsWithChildren, useEffect, useMemo } from 'react'
-import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRealtimeFlights } from '@/app/hooks/use-realtime-flights'
+import VietnameseVectorBasemap from '@/app/components/VietnameseVectorBasemap'
 import { mapRealtimeFlight, type RealtimeFlight, type RealtimeFlightStatus } from '@/lib/skytrack-data'
 
 export interface FlightMarkerData {
@@ -42,7 +43,6 @@ interface MapViewProps {
 }
 
 const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>
-const LeafletTileLayer = TileLayer as unknown as ComponentType<Record<string, unknown>>
 const LeafletMarker = Marker as unknown as ComponentType<LeafletComponentProps>
 
 const AIRPORTS = [
@@ -55,14 +55,15 @@ const AIRPORTS = [
 ]
 
 function createPlaneIcon(flight: FlightMarkerData, selected: boolean) {
-  const color = selected ? '#facc15' : flight.onGround ? '#94a3b8' : flight.altitude !== null && flight.altitude < 2500 ? '#22d3ee' : '#60a5fa'
-  const size = selected ? 31 : flight.onGround ? 18 : 24
+  const color = selected ? '#fef08a' : flight.onGround ? '#e2e8f0' : flight.altitude !== null && flight.altitude < 2500 ? '#2dd4bf' : '#fb923c'
+  const glow = selected ? '#facc15' : flight.onGround ? '#64748b' : flight.altitude !== null && flight.altitude < 2500 ? '#14b8a6' : '#f97316'
+  const size = selected ? 32 : flight.onGround ? 20 : 25
 
   return L.divIcon({
     className: 'custom-flight-marker',
-    html: `<div style="position:relative;width:${size}px;height:${size}px;display:grid;place-items:center;transform:rotate(${flight.rotation}deg);filter:drop-shadow(0 0 ${selected ? 9 : 5}px ${color});transition:all .2s ease">
+    html: `<div style="position:relative;width:${size}px;height:${size}px;display:grid;place-items:center;transform:rotate(${flight.rotation}deg);filter:drop-shadow(0 1px 1px #020617) drop-shadow(0 0 ${selected ? 10 : 6}px ${glow});transition:all .2s ease">
       ${selected ? '<span style="position:absolute;inset:-7px;border:1px solid rgba(250,204,21,.65);border-radius:50%"></span>' : ''}
-      <svg width="100%" height="100%" viewBox="0 0 24 24" fill="${color}" stroke="#07111f" stroke-width="0.8">
+      <svg width="100%" height="100%" viewBox="0 0 24 24" fill="${color}" stroke="#ffffff" stroke-width="0.9" paint-order="stroke">
         <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
       </svg>
     </div>`,
@@ -167,7 +168,7 @@ export default function MapView({
   return (
     <div className="absolute inset-0 bg-[#07111f]">
       <LeafletMapContainer center={[14, 108]} zoom={6} zoomControl={false} attributionControl={false} className="absolute inset-0 h-full w-full">
-        <LeafletTileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+        <VietnameseVectorBasemap />
         <MapLifecycle selectedFlight={selectedFlight} />
 
         {showAirports && AIRPORTS.map((airport) => (

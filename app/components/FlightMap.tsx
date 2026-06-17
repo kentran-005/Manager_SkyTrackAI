@@ -3,7 +3,6 @@
 import { Fragment, type ComponentType, type PropsWithChildren, useEffect, useState } from 'react';
 import {
   MapContainer,
-  TileLayer,
   Marker,
   Polyline,
   ZoomControl,
@@ -13,6 +12,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { BarChart3, Building2, CloudSun, Filter, Flame, Route, Search } from 'lucide-react';
+import VietnameseVectorBasemap from '@/app/components/VietnameseVectorBasemap';
 
 export interface Flight {
   id: string | number;
@@ -43,7 +43,6 @@ export interface MapWeather {
 type LeafletComponentProps = PropsWithChildren<Record<string, unknown>>;
 
 const LeafletMapContainer = MapContainer as unknown as ComponentType<LeafletComponentProps>;
-const LeafletTileLayer = TileLayer as unknown as ComponentType<Record<string, unknown>>;
 const LeafletMarker = Marker as unknown as ComponentType<LeafletComponentProps>;
 const LeafletPolyline = Polyline as unknown as ComponentType<Record<string, unknown>>;
 const LeafletTooltip = Tooltip as unknown as ComponentType<LeafletComponentProps>;
@@ -54,15 +53,16 @@ interface InteractiveMap {
 }
 
 function createPlaneIcon(heading: number, selected: boolean) {
-  const size = selected ? 32 : 22;
-  const color = selected ? '#3b82f6' : '#facc15';
-  const shadow = selected ? 'filter:drop-shadow(0 0 6px #3b82f680);' : '';
+  const size = selected ? 32 : 25;
+  const color = selected ? '#fef08a' : '#fb923c';
+  const glow = selected ? '#facc15' : '#f97316';
 
   return L.divIcon({
     className: '',
     html: `
-      <div style="transform:rotate(${heading}deg);width:${size}px;height:${size}px;${shadow}transition:all 0.3s ease;">
-        <svg viewBox="0 0 24 24" fill="${color}" width="100%" height="100%">
+      <div style="position:relative;display:grid;place-items:center;transform:rotate(${heading}deg);width:${size}px;height:${size}px;filter:drop-shadow(0 1px 1px #020617) drop-shadow(0 0 ${selected ? 10 : 6}px ${glow});transition:all 0.3s ease;">
+        ${selected ? '<span style="position:absolute;inset:-7px;border:1px solid rgba(250,204,21,.65);border-radius:50%"></span>' : ''}
+        <svg viewBox="0 0 24 24" fill="${color}" stroke="#ffffff" stroke-width="0.9" paint-order="stroke" width="100%" height="100%">
           <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L14 19v-5.5L21 16z"/>
         </svg>
       </div>
@@ -170,7 +170,7 @@ export default function FlightMap({
         attributionControl={false}
       >
         <LeafletZoomControl position="bottomright" />
-        <LeafletTileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+        <VietnameseVectorBasemap />
         <FlyToSelected flight={selectedFlight} />
 
         {activeLayers.traffic && flights.map((flight: Flight) => {
@@ -218,6 +218,7 @@ export default function FlightMap({
           );
         })}
       </LeafletMapContainer>
+
 
       {activeLayers.weather && weather && (
         <div className="absolute right-4 top-4 z-[1000] w-[min(280px,calc(100%-32px))] rounded-2xl border border-white/10 bg-[#0b101d]/92 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">

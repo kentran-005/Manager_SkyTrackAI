@@ -4,7 +4,8 @@ import {
   Search, 
   Plus, 
   Pencil, 
-  Trash2
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 import api from "@/lib/axios";
 import type { BackendAirline } from "@/lib/skytrack-data";
@@ -70,6 +71,20 @@ export default function AirlinesPage() {
     }
   }
 
+  async function uploadLogo(airline: BackendAirline, file: File) {
+  if (!airline.id) return;
+  const formData = new FormData();
+  formData.append("logo", file);
+  try {
+    await api.put(`/api/airlines/${airline.id}/logo`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    await loadAirlines();
+  } catch (requestError) {
+    setError(requestError instanceof Error ? requestError.message : "Unable to upload logo.");
+  }
+}
+
   return (
     <div className="flex min-h-screen bg-[#f8fafc] text-slate-800 font-sans">
       
@@ -113,8 +128,8 @@ export default function AirlinesPage() {
                 <th className="py-4 px-6 w-16">ID</th>
                 <th className="py-4 px-6 w-24">Code</th>
                 <th className="py-4 px-6">Airline Name</th>
-                <th className="py-4 px-6 w-32 text-center">Logo</th>
-                  <th className="py-4 px-6 w-28 text-center">Actions</th>
+                <th className="py-4 px-6 w-28 text-center">Logo</th>
+                <th className="py-4 px-6 w-28 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm font-medium text-slate-700">
@@ -127,8 +142,40 @@ export default function AirlinesPage() {
                     </span>
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-900">{airline.name}</td>
-                  <td className="py-4 px-6 text-center text-xl">{airline.logo || "✈"}</td>
+
+                  {/* Logo column: ảnh/icon logo và nút upload nằm cùng cột, canh giữa theo chiều dọc */}
                   <td className="py-4 px-6">
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      {airline.logo ? (
+                        <img
+                          src={`${process.env.NEXT_PUBLIC_API_URL}${airline.logo}`}
+                          alt={airline.name}
+                          className="w-10 h-10 object-contain"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      ) : (
+                        <div className="flex justify-center items-center h-10 text-xl text-slate-400">
+                          ✈
+                        </div>
+                      )}
+                      <label className="text-slate-400 hover:text-emerald-600 transition-colors p-1 hover:bg-slate-100 rounded-lg cursor-pointer" title="Upload logo">
+                        <ImageIcon className="w-4 h-4" />
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) void uploadLogo(airline, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </td>
+
+                  {/* Actions column: chỉ còn Edit và Delete */}
+                  <td className="py-4 px-6 text-center">
                     <div className="flex items-center justify-center gap-3">
                       <button onClick={() => void editAirline(airline)} className="text-slate-400 hover:text-blue-600 transition-colors p-1 hover:bg-slate-100 rounded-lg">
                         <Pencil className="w-4 h-4" />

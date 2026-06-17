@@ -179,9 +179,9 @@ export default function LiveMapPage() {
 
       <div className="absolute bottom-3 right-3 z-[1000] hidden rounded-2xl border border-white/10 bg-[#0a111d]/90 px-4 py-3 shadow-xl backdrop-blur sm:block">
         <div className="flex items-center gap-4 text-[11px] font-medium text-slate-400">
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-400" /> Cruise</span>
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-cyan-400" /> Low altitude</span>
-          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" /> Ground</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_7px_#f97316]" /> Cruise</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_7px_#14b8a6]" /> Low altitude</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-200 shadow-[0_0_6px_#64748b]" /> Ground</span>
           <Layers3 className="h-4 w-4 text-slate-600" />
         </div>
       </div>

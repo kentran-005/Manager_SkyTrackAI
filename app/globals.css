@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -156,6 +157,7 @@
 /* Leaflet container overrides */
 .leaflet-container {
   font-family: inherit !important;
+  background: #07111f !important;
 }
 
 .leaflet-control-attribution {

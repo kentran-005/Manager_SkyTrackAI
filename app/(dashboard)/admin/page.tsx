@@ -6,6 +6,7 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import api from "@/lib/axios";
+import { askAviationAssistant } from "@/lib/aviation-ai";
 import type { BackendFlight, BackendStats } from "@/lib/skytrack-data";
 
 const CHART_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#64748b"];
@@ -109,18 +110,21 @@ export default function AdminDashboard() {
     ? Math.round((flights.filter((flight) => ["ON_TIME", "SCHEDULED", "BOARDING"].includes(flight.status ?? "")).length / flights.length) * 1000) / 10
     : 0;
 
-  // Đổi sang gọi API Backend Spring Boot (Gemini) của chúng ta
   async function sendAI() {
     if (!aiInput.trim()) return;
     const question = aiInput;
+    const history = aiMessages.flatMap((message) => [
+      { role: "user" as const, content: message.q },
+      { role: "assistant" as const, content: message.a },
+    ]);
     setAiInput("");
     setLoading(true);
     try {
-      const { data } = await api.post("/api/ai/chat", { question });
-      const answer = data.answer || "Sorry, I couldn't get a response.";
+      const answer = await askAviationAssistant(question, history, "admin");
       setAiMessages(prev => [...prev, { q: question, a: answer }]);
-    } catch {
-      setAiMessages(prev => [...prev, { q: question, a: "Connection error. Please check if Backend is running." }]);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "AI service is temporarily unavailable.";
+      setAiMessages(prev => [...prev, { q: question, a: message }]);
     } finally {
       setLoading(false);
     }
