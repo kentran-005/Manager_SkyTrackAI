@@ -18,7 +18,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return new NextResponse(response.body, {
       status: response.status,
       headers: {
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": response.ok
+          ? "public, s-maxage=3600, stale-while-revalidate=86400"
+          : "no-store",
         "Content-Type": response.headers.get("content-type") || "application/octet-stream",
       },
     });

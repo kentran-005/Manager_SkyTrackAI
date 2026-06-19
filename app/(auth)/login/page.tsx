@@ -26,6 +26,8 @@ export default function LoginPage() {
       sessionStorage.removeItem("skytrack_auth_message");
     } else if (reason === "registered") {
       setMessage("Account created successfully. You can sign in now.");
+    } else if (reason === "password-reset") {
+      setMessage("Password updated successfully. You can sign in now.");
     }
   }, []);
 
@@ -95,7 +97,7 @@ export default function LoginPage() {
             <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="h-4 w-4 rounded border-white/20 accent-blue-600" />
             Remember me
           </label>
-          <button type="button" onClick={() => setMessage("Please contact a SkyTrack administrator to reset your password.")} className="text-xs font-semibold text-blue-300 transition hover:text-white">Forgot password?</button>
+          <Link href="/forgot-password" className="text-xs font-semibold text-blue-300 transition hover:text-white">Forgot password?</Link>
         </div>
 
         <button type="submit" disabled={loading} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-black text-white shadow-[0_12px_28px_rgba(37,99,235,.32)] transition hover:-translate-y-0.5 hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60">
