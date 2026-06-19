@@ -113,7 +113,7 @@ export default function AdminReportsPage() {
   }
 
   const statCards = [
-    { label: "Total flights", value: total, detail: "Railway records", icon: Plane, tone: "bg-blue-50 text-blue-600" },
+    { label: "Total flights", value: total, detail: "Flight records", icon: Plane, tone: "bg-blue-50 text-blue-600" },
     { label: "On track", value: onTime, detail: percentage(onTime), icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-600" },
     { label: "Delayed", value: delayed, detail: percentage(delayed), icon: TriangleAlert, tone: "bg-amber-50 text-amber-600" },
     { label: "Cancelled", value: cancelled, detail: percentage(cancelled), icon: CircleX, tone: "bg-rose-50 text-rose-600" },
@@ -127,7 +127,7 @@ export default function AdminReportsPage() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Operations intelligence</p>
             <h1 className="mt-2 text-3xl font-bold tracking-[-0.04em] text-slate-950">Reports & Analytics</h1>
-            <p className="mt-2 text-sm text-slate-500">Live operational insights generated from Railway flight data.</p>
+            <p className="mt-2 text-sm text-slate-500">Live operational insights generated from SkyTrack flight data.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600"><CalendarDays className="h-4 w-4 text-blue-500" /> Updated {new Date().toLocaleDateString("en-GB")}</span>

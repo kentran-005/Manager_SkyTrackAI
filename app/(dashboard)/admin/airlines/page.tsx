@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { 
   Search, 
@@ -9,6 +10,11 @@ import {
 } from 'lucide-react';
 import api from "@/lib/axios";
 import type { BackendAirline } from "@/lib/skytrack-data";
+
+function airlineLogoUrl(value: string) {
+  if (/^https?:\/\//i.test(value)) return value;
+  return `/api/assets/${value.replace(/^\/+/, "")}`;
+}
 
 export default function AirlinesPage() {
   const [airlines, setAirlines] = useState<BackendAirline[]>([]);
@@ -143,34 +149,54 @@ export default function AirlinesPage() {
                   </td>
                   <td className="py-4 px-6 font-semibold text-slate-900">{airline.name}</td>
 
-                  {/* Logo column: ảnh/icon logo và nút upload nằm cùng cột, canh giữa theo chiều dọc */}
+                  {/* Logo */}
                   <td className="py-4 px-6">
-                    <div className="flex flex-col items-center justify-center gap-1.5">
+                    <div className="flex flex-col items-center justify-center gap-1.5 group relative">
                       {airline.logo ? (
-                        <img
-                          src={`${process.env.NEXT_PUBLIC_API_URL}${airline.logo}`}
-                          alt={airline.name}
-                          className="w-10 h-10 object-contain"
-                          onError={(e) => { e.currentTarget.style.display = "none"; }}
-                        />
+                        <>
+                          <Image
+                            src={airlineLogoUrl(airline.logo)}
+                            alt={airline.name || airline.code || "Airline logo"}
+                            width={64}
+                            height={64}
+                            unoptimized
+                            className="w-16 h-16 object-contain"
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                          />
+                          {/* Nút upload chỉ hiện khi hover vào ảnh */}
+                          <label
+                            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/70 rounded-lg cursor-pointer"
+                            title="Đổi logo"
+                          >
+                            <ImageIcon className="w-5 h-5 text-emerald-600" />
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) void uploadLogo(airline, file);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </>
                       ) : (
-                        <div className="flex justify-center items-center h-10 text-xl text-slate-400">
-                          ✈
-                        </div>
+                        <label className="flex flex-col items-center gap-1 text-slate-400 hover:text-emerald-600 transition-colors p-2 hover:bg-slate-100 rounded-lg cursor-pointer" title="Upload logo">
+                          <ImageIcon className="w-5 h-5" />
+                          <span className="text-xs">Upload</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) void uploadLogo(airline, file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
                       )}
-                      <label className="text-slate-400 hover:text-emerald-600 transition-colors p-1 hover:bg-slate-100 rounded-lg cursor-pointer" title="Upload logo">
-                        <ImageIcon className="w-4 h-4" />
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) void uploadLogo(airline, file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
                     </div>
                   </td>
 
@@ -191,7 +217,6 @@ export default function AirlinesPage() {
             </tbody>
           </table>
         </div>
-
       </main>
     </div>
   );

@@ -15,9 +15,12 @@ import {
   Save,
   ShieldCheck,
   User,
+  type LucideIcon,
 } from 'lucide-react'
 import api from '@/lib/axios'
 import { useAuth } from '@/lib/authContext'
+import buttonStyle from '../../admin/settings/css/button.module.css'
+import switchStyle from '../../admin/settings/css/switch.module.css'
 
 interface ProfileData {
   id: number
@@ -43,7 +46,7 @@ interface PreferenceRowProps {
   label: string
   description: string
   checked: boolean
-  onChange: () => void
+  onChange: (checked: boolean) => void
 }
 
 function PreferenceRow({ label, description, checked, onChange }: PreferenceRowProps) {
@@ -53,10 +56,59 @@ function PreferenceRow({ label, description, checked, onChange }: PreferenceRowP
         <div className="text-sm font-semibold text-slate-800">{label}</div>
         <div className="mt-1 text-xs leading-5 text-slate-500">{description}</div>
       </div>
-      <button type="button" role="switch" aria-checked={checked} onClick={onChange} className={`relative h-7 w-12 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${checked ? 'bg-blue-600' : 'bg-slate-200'}`}>
-        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
-      </button>
+      <label className={switchStyle['plane-switch']}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          aria-label={`${label}: ${checked ? 'enabled' : 'disabled'}`}
+        />
+        <div>
+          <div>
+            <svg viewBox="0 0 13 13" aria-hidden="true">
+              <path d="M1.55989957,5.41666667 L5.51582215,5.41666667 L4.47015462,0.108333333 C4.47015462,0.0634601974 4.49708054,0.0249592654 4.5354546,0.00851337035 L4.57707145,0 L5.36229752,0 C5.43359776,0 5.50087375,0.028779451 5.55026392,0.0782711996 L5.59317877,0.134368264 L7.13659662,2.81558333 L8.29565964,2.81666667 C8.53185377,2.81666667 8.72332694,3.01067661 8.72332694,3.25 C8.72332694,3.48932339 8.53185377,3.68333333 8.29565964,3.68333333 L7.63589819,3.68225 L8.63450135,5.41666667 L11.9308317,5.41666667 C12.5213171,5.41666667 13,5.90169152 13,6.5 C13,7.09830848 12.5213171,7.58333333 11.9308317,7.58333333 L8.63450135,7.58333333 L7.63589819,9.31666667 L8.29565964,9.31666667 C8.53185377,9.31666667 8.72332694,9.51067661 8.72332694,9.75 C8.72332694,9.98932339 8.53185377,10.1833333 8.29565964,10.1833333 L7.13659662,10.1833333 L5.59317877,12.8656317 C5.55725264,12.9280353 5.49882018,12.9724157 5.43174295,12.9907056 L5.36229752,13 L4.57707145,13 C4.51267695,12.9890959 4.48069792,12.9547924 4.47230803,12.9134397 L5.51582215,7.58333333 L1.55989957,7.58333333 L0.891288881,8.55114605 C0.853775374,8.60544678 0.798421006,8.64327676 0.73629202,8.65879796 L0.106844414,8.66666667 C0.0297243066,8.6457608 0.00275502199,8.60729104 0,8.5651586 L0.580855011,6.85813984 C0.64492547,6.67265611 0.6577034,6.47392717 0.619193545,6.28316421 L0.00601851064,4.48064746 C0.00203480725,4.4691314 0,4.45701613 0,4.44481314 C0,4.39994001 0.0269259152,4.36143908 0.0652999725,4.34499318 L0.672546853,4.33647981 C0.737865848,4.33647981 0.80011301,4.36066329 0.848265401,4.40322477 L1.55989957,5.41666667 Z" fill="currentColor" />
+            </svg>
+          </div>
+          <span className={switchStyle['street-middle']} />
+          <span className={switchStyle.cloud} />
+          <span className={`${switchStyle.cloud} ${switchStyle.two}`} />
+        </div>
+      </label>
     </div>
+  )
+}
+
+function ProfileActionButton({
+  icon: Icon,
+  idleLabel,
+  busyLabel,
+  savedLabel,
+  busy,
+  saved,
+  onClick,
+}: {
+  icon: LucideIcon
+  idleLabel: string
+  busyLabel: string
+  savedLabel: string
+  busy: boolean
+  saved: boolean
+  onClick: () => void
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={busy} className={buttonStyle.btn}>
+      <span className={`${buttonStyle.label} inline-flex items-center gap-2`}>
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+        {busy ? busyLabel : saved ? savedLabel : idleLabel}
+      </span>
+      <span className={buttonStyle.containerStars} aria-hidden="true">
+        <span className={buttonStyle.stars} />
+      </span>
+      <span className={buttonStyle.glow} aria-hidden="true">
+        <span className={buttonStyle.circle} />
+        <span className={buttonStyle.circle} />
+      </span>
+    </button>
   )
 }
 
@@ -82,6 +134,15 @@ export default function ProfilePage() {
   const [changingPassword, setChangingPassword] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [savedAction, setSavedAction] = useState<'profile' | 'preferences' | 'password' | null>(null)
+
+  function showSuccess(action: 'profile' | 'preferences' | 'password', message: string) {
+    setSavedAction(action)
+    setSuccess(message)
+    window.setTimeout(() => {
+      setSavedAction((current) => current === action ? null : current)
+    }, 2000)
+  }
 
   function applyProfile(data: ProfileData) {
     setProfile(data)
@@ -124,7 +185,7 @@ export default function ProfilePage() {
         { ...user, name: response.data.name, email: response.data.email, role: response.data.role },
         response.data.token ?? undefined,
       )
-      setSuccess('Profile information updated.')
+      showSuccess('profile', 'Profile information updated.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not update your profile.')
     } finally {
@@ -139,7 +200,7 @@ export default function ProfilePage() {
     try {
       const response = await api.put<ProfileData>('/api/profile/preferences', preferences)
       applyProfile(response.data)
-      setSuccess('Notification preferences saved.')
+      showSuccess('preferences', 'Notification preferences saved.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not save notification preferences.')
     } finally {
@@ -164,7 +225,7 @@ export default function ProfilePage() {
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-      setSuccess('Password changed successfully.')
+      showSuccess('password', 'Password changed successfully.')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not change your password.')
     } finally {
@@ -250,7 +311,15 @@ export default function ProfilePage() {
                 <label className="text-xs font-semibold text-slate-600">Language<select value={language} onChange={(event) => setLanguage(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:bg-white"><option>English</option><option>Tiếng Việt</option></select></label>
               </div>
               <div className="mt-5 flex justify-end">
-                <button type="button" onClick={() => void saveProfile()} disabled={savingProfile} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-wait disabled:opacity-60">{savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save profile</button>
+                <ProfileActionButton
+                  icon={Save}
+                  idleLabel="Save profile"
+                  busyLabel="Saving..."
+                  savedLabel="Saved"
+                  busy={savingProfile}
+                  saved={savedAction === 'profile'}
+                  onClick={() => void saveProfile()}
+                />
               </div>
             </section>
 
@@ -260,13 +329,21 @@ export default function ProfilePage() {
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600"><Bell className="h-5 w-5" /></span>
               </div>
               <div className="mt-5">
-                <PreferenceRow label="Email notifications" description="Receive important flight updates by email." checked={preferences.emailNotifications} onChange={() => setPreferences((value) => ({ ...value, emailNotifications: !value.emailNotifications }))} />
-                <PreferenceRow label="Browser notifications" description="Show updates while the SkyTrack workspace is open." checked={preferences.pushNotifications} onChange={() => setPreferences((value) => ({ ...value, pushNotifications: !value.pushNotifications }))} />
-                <PreferenceRow label="Flight status alerts" description="Notify when a tracked flight is delayed, boarding or cancelled." checked={preferences.flightAlerts} onChange={() => setPreferences((value) => ({ ...value, flightAlerts: !value.flightAlerts }))} />
-                <PreferenceRow label="Price drop alerts" description="Receive promotional fare and price change notifications." checked={preferences.priceAlerts} onChange={() => setPreferences((value) => ({ ...value, priceAlerts: !value.priceAlerts }))} />
+                <PreferenceRow label="Email notifications" description="Receive important flight updates by email." checked={preferences.emailNotifications} onChange={(checked) => setPreferences((value) => ({ ...value, emailNotifications: checked }))} />
+                <PreferenceRow label="Browser notifications" description="Show updates while the SkyTrack workspace is open." checked={preferences.pushNotifications} onChange={(checked) => setPreferences((value) => ({ ...value, pushNotifications: checked }))} />
+                <PreferenceRow label="Flight status alerts" description="Notify when a tracked flight is delayed, boarding or cancelled." checked={preferences.flightAlerts} onChange={(checked) => setPreferences((value) => ({ ...value, flightAlerts: checked }))} />
+                <PreferenceRow label="Price drop alerts" description="Receive promotional fare and price change notifications." checked={preferences.priceAlerts} onChange={(checked) => setPreferences((value) => ({ ...value, priceAlerts: checked }))} />
               </div>
               <div className="mt-5 flex justify-end border-t border-slate-100 pt-5">
-                <button type="button" onClick={() => void savePreferences()} disabled={savingPreferences} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-wait disabled:opacity-60">{savingPreferences ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save preferences</button>
+                <ProfileActionButton
+                  icon={Bell}
+                  idleLabel="Save preferences"
+                  busyLabel="Saving..."
+                  savedLabel="Saved"
+                  busy={savingPreferences}
+                  saved={savedAction === 'preferences'}
+                  onClick={() => void savePreferences()}
+                />
               </div>
             </section>
 
@@ -281,7 +358,15 @@ export default function ProfilePage() {
                 <label className="text-xs font-semibold text-slate-600">Confirm password<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:bg-white" /></label>
               </div>
               <div className="mt-5 flex justify-end">
-                <button type="button" onClick={() => void changePassword()} disabled={changingPassword} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-wait disabled:opacity-60">{changingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Update password</button>
+                <ProfileActionButton
+                  icon={KeyRound}
+                  idleLabel="Update password"
+                  busyLabel="Updating..."
+                  savedLabel="Updated"
+                  busy={changingPassword}
+                  saved={savedAction === 'password'}
+                  onClick={() => void changePassword()}
+                />
               </div>
             </section>
           </div>

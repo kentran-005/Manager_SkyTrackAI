@@ -57,7 +57,7 @@ const USER_LINKS: NavLink[] = [
 ]
 
 const PAGE_TITLES: Record<string, string> = {
-  '/user': 'My flights',
+  '/user': 'Flight overview',
   '/user/searchflight': 'Search flights',
   '/user/live-map': 'Live map',
   '/user/notifications': 'Notifications',
@@ -106,10 +106,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let active = true
     api.get<Array<{ read?: boolean }>>('/api/notifications/me')
       .then((response) => {
-        if (active) {
-          const notifications = Array.isArray(response.data) ? response.data : []
-          setUnreadNotifications(notifications.filter((item) => !item.read).length)
-        }
+        if (!active) return
+        const notifications = Array.isArray(response.data) ? response.data : []
+        setUnreadNotifications(notifications.filter((item) => !item.read).length)
       })
       .catch(() => {
         if (active) setUnreadNotifications(0)
@@ -176,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {links.map((link) => {
             const Icon = link.icon
             const active = isActiveRoute(pathname, link.href)
-            const badge = link.href === '/user/notifications' ? unreadNotifications : link.badge
+            const badge = link.href === '/user/notifications' ? unreadNotifications : (link.badge ?? 0)
             return (
               <Link
                 key={link.href}
@@ -187,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <Icon className={`h-[18px] w-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-blue-300'}`} />
                 <span className="flex-1">{link.label}</span>
-                {badge ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{badge > 99 ? '99+' : badge}</span> : null}
+                {badge > 0 ? <span className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${active ? 'bg-white text-blue-700' : 'bg-rose-500 text-white'}`}>{badge > 99 ? '99+' : badge}</span> : null}
               </Link>
             )
           })}
@@ -240,7 +239,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Bell className="h-4 w-4" />
               {!isAdminRoute && unreadNotifications > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
             </Link>
-            <Link href="/user/profile" aria-label="Open profile" className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
+            <Link href={isAdminRoute ? '/admin' : '/user/profile'} aria-label={isAdminRoute ? 'Admin profile' : 'Open profile'} className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
               {user.name?.charAt(0).toUpperCase() || 'U'}
             </Link>
           </div>

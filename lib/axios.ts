@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/+$/, '');
-
 const api = axios.create({
-  baseURL: apiUrl,
+  // Browser requests stay on the Next.js origin and are proxied server-to-server
+  // by app/api/[...path]. This avoids exposing Railway URLs and removes CORS.
+  baseURL: '',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -70,7 +70,10 @@ api.interceptors.response.use(
           : 'Backend is unavailable. Please check the API server.'
         : backendMessage || 'Cannot connect to SkyTrack backend';
 
-    return Promise.reject(new Error(message));
+    return Promise.reject(Object.assign(new Error(message), {
+      status,
+      code: error.code,
+    }));
   }
 );
 

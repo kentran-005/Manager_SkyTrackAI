@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
       ...data,
       provider: "OpenWeather",
       observedAt: typeof data.dt === "number" ? new Date(data.dt * 1000).toISOString() : null,
+    }, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
     });
   } catch (error: unknown) {
     return NextResponse.json(

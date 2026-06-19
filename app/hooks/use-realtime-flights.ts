@@ -17,8 +17,9 @@ interface RealtimeFlightState {
   fetchedAt: Date | null
 }
 
-const POLL_INTERVAL_MS = 60_000
-const REQUEST_DEDUP_MS = 15_000
+const POLL_INTERVAL_MS = 15_000
+const REQUEST_DEDUP_MS = 5_000
+const REQUEST_TIMEOUT_MS = 10_000
 const listeners = new Set<(state: RealtimeFlightState) => void>()
 
 let sharedState: RealtimeFlightState = {
@@ -29,7 +30,7 @@ let sharedState: RealtimeFlightState = {
   fetchedAt: null,
 }
 let activeRequest: Promise<void> | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 let lastRequestAt = 0
 
 function publish(nextState: RealtimeFlightState) {
@@ -39,12 +40,18 @@ function publish(nextState: RealtimeFlightState) {
 
 async function requestSnapshot() {
   try {
-    const response = await api.get<RealtimeFlightSnapshotResponse>('/api/realtime-flights/snapshot')
+    const response = await api.get<RealtimeFlightSnapshotResponse>('/api/realtime-flights/snapshot', {
+      timeout: REQUEST_TIMEOUT_MS,
+    })
     return response.data
-  } catch {
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status
+
+    if (status !== 404 && status !== 405) throw error
+
     const [flightsResult, statusResult] = await Promise.allSettled([
-      api.get<RealtimeFlight[]>('/api/realtime-flights'),
-      api.get<RealtimeFlightStatus>('/api/realtime-flights/status'),
+      api.get<RealtimeFlight[]>('/api/realtime-flights', { timeout: REQUEST_TIMEOUT_MS }),
+      api.get<RealtimeFlightStatus>('/api/realtime-flights/status', { timeout: REQUEST_TIMEOUT_MS }),
     ])
 
     if (flightsResult.status === 'rejected') throw flightsResult.reason
@@ -91,20 +98,48 @@ async function loadRealtimeFlights(force = false) {
   return activeRequest
 }
 
+function scheduleNextPoll() {
+  if (pollTimer) clearTimeout(pollTimer)
+  if (listeners.size === 0) {
+    pollTimer = null
+    return
+  }
+
+  pollTimer = setTimeout(() => {
+    void loadRealtimeFlights(true).finally(scheduleNextPoll)
+  }, POLL_INTERVAL_MS)
+}
+
+function refreshWhenActive() {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+  void loadRealtimeFlights(true).finally(scheduleNextPoll)
+}
+
 function subscribe(listener: (state: RealtimeFlightState) => void) {
   listeners.add(listener)
   listener(sharedState)
 
   if (listeners.size === 1) {
-    void loadRealtimeFlights()
-    pollTimer = setInterval(() => void loadRealtimeFlights(true), POLL_INTERVAL_MS)
+    void loadRealtimeFlights().finally(scheduleNextPoll)
+    window.addEventListener('focus', refreshWhenActive)
+    window.addEventListener('online', refreshWhenActive)
+    document.addEventListener('visibilitychange', refreshWhenActive)
   }
 
   return () => {
     listeners.delete(listener)
-    if (listeners.size === 0 && pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
+    if (listeners.size === 0) {
+      if (pollTimer) {
+        clearTimeout(pollTimer)
+        pollTimer = null
+      }
+      window.removeEventListener('focus', refreshWhenActive)
+      window.removeEventListener('online', refreshWhenActive)
+      document.removeEventListener('visibilitychange', refreshWhenActive)
     }
   }
 }

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Building2, Clock3, Loader2, Plane, Search, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowRight, Building2, Clock3, Loader2, Plane, Search, Sparkles } from "lucide-react";
 import api from "@/lib/axios";
 import {
   type BackendFlight,
@@ -24,7 +24,9 @@ type SearchState = {
 };
 
 async function searchFlights(query: string) {
-  const { data } = await api.get(`/api/flights/search?q=${encodeURIComponent(query)}`);
+  const { data } = await api.get(`/api/flights/search?q=${encodeURIComponent(query)}`, {
+    timeout: 10_000,
+  });
   return Array.isArray(data) ? (data as BackendFlight[]).map(mapBackendFlight) : [];
 }
 
@@ -236,16 +238,6 @@ function FlightSearchContent() {
               <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Status</div>
               <div className="mt-2 text-2xl font-semibold text-slate-950">{state.loading ? "Searching" : `${state.results.length}`}</div>
             </div>
-          </div>
-
-          <div className="rounded-3xl bg-gradient-to-br from-blue-50 to-cyan-50 p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <TriangleAlert className="h-4 w-4 text-blue-500" />
-              Backend notes
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Results are fetched from <code>/api/flights/search</code>. If the backend is down, you will get a clear inline error instead of a broken page.
-            </p>
           </div>
 
           <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
