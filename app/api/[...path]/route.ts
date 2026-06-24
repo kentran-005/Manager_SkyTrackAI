@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const REQUEST_TIMEOUT_MS = 25_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 25_000;
+const REALTIME_REQUEST_TIMEOUT_MS = 8_000;
 const RESPONSE_HEADERS = [
   "content-disposition",
   "content-language",
@@ -41,6 +42,12 @@ function cacheControl(path: string[], request: NextRequest) {
   return "no-store";
 }
 
+function requestTimeout(path: string[]) {
+  return path[0] === "realtime-flights"
+    ? REALTIME_REQUEST_TIMEOUT_MS
+    : DEFAULT_REQUEST_TIMEOUT_MS;
+}
+
 async function proxyRequest(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
   const targetUrl = new URL(`/api/${path.map(encodeURIComponent).join("/")}`, backendBaseUrl());
@@ -53,7 +60,9 @@ async function proxyRequest(request: NextRequest, context: RouteContext) {
   headers.delete("origin");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), requestTimeout(path));
+  const abortFromClient = () => controller.abort();
+  request.signal.addEventListener("abort", abortFromClient, { once: true });
 
   try {
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
@@ -90,6 +99,7 @@ async function proxyRequest(request: NextRequest, context: RouteContext) {
     );
   } finally {
     clearTimeout(timeout);
+    request.signal.removeEventListener("abort", abortFromClient);
   }
 }
 
